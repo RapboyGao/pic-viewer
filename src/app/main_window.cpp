@@ -26,6 +26,7 @@ namespace {
 constexpr int kDefaultIntervalMs = 3000;
 constexpr int kThumbnailSize = 96;
 constexpr int kMaxThumbnailInflight = 2;
+constexpr int kDecodeThreadStackSize = 8 * 1024 * 1024;
 
 QString modeLabelForAction(int intervalMs)
 {
@@ -41,6 +42,12 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     setWindowTitle("pic-viewer");
     setWindowIcon(QIcon(":/icons/app_icon.xpm"));
     resize(1200, 800);
+
+    imageDecodePool_.setMaxThreadCount(2);
+    imageDecodePool_.setStackSize(kDecodeThreadStackSize);
+
+    thumbnailDecodePool_.setMaxThreadCount(kMaxThumbnailInflight);
+    thumbnailDecodePool_.setStackSize(kDecodeThreadStackSize);
 
     auto* central = new QWidget(this);
     auto* layout = new QVBoxLayout(central);
@@ -289,7 +296,7 @@ void MainWindow::requestImage(const QString& path, DecodeMode mode, bool display
             handleDecodedImage(path, mode, sequence, image);
         }
     });
-    watcher->setFuture(QtConcurrent::run([path, mode]() {
+    watcher->setFuture(QtConcurrent::run(&imageDecodePool_, [path, mode]() {
         return ImageDecoder::decode(path, mode);
     }));
 }
@@ -580,7 +587,7 @@ void MainWindow::processPendingThumbnailRequests()
             }
             processPendingThumbnailRequests();
         });
-        watcher->setFuture(QtConcurrent::run([path]() -> QImage {
+        watcher->setFuture(QtConcurrent::run(&thumbnailDecodePool_, [path]() -> QImage {
             return ImageDecoder::decodeThumbnail(path, kThumbnailSize);
         }));
     }

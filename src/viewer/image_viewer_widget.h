@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QPixmap>
+#include <QImage>
 #include <QPointF>
 #include <QWidget>
 
@@ -42,9 +42,10 @@ private:
     [[nodiscard]] QSize scaledSize() const;
     [[nodiscard]] QRectF targetRect() const;
     [[nodiscard]] QSize baseSize() const;
+    [[nodiscard]] bool shouldUseSmoothSampling(const QRectF& target) const;
     void resetViewTransform();
 
-    QPixmap pixmap_;
+    QImage image_;
     QString title_;
     QString detail_;
     double zoomFactor_ = 1.0;

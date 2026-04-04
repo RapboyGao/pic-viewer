@@ -1,0 +1,55 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build pic-viewer",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build.sh",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "RUN_TESTS": "0"
+        }
+      },
+      "windows": {
+        "command": "${workspaceFolder}\\scripts\\build.bat",
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "env": {
+            "RUN_TESTS": "0"
+          }
+        }
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    },
+    {
+      "label": "build pic-viewer with tests",
+      "type": "shell",
+      "command": "${workspaceFolder}/scripts/build.sh",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "RUN_TESTS": "1"
+        }
+      },
+      "windows": {
+        "command": "${workspaceFolder}\\scripts\\build.bat",
+        "options": {
+          "cwd": "${workspaceFolder}",
+          "env": {
+            "RUN_TESTS": "1"
+          }
+        }
+      },
+      "problemMatcher": [
+        "$gcc"
+      ]
+    }
+  ]
+}

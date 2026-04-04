@@ -73,6 +73,15 @@ Windows:
 scripts\run.bat C:\path\to\image-or-folder
 ```
 
+## VS Code Debug
+
+Press `F5` and choose the platform-specific launch configuration.
+
+- VS Code will run `.vscode/tasks.json` task `build pic-viewer` first
+- On macOS it calls `scripts/build.sh` and launches `build/pic-viewer` with `CodeLLDB`
+- On Windows it calls `scripts/build.bat` and launches `build\pic-viewer.exe` with `cppvsdbg`
+- Launch now starts with no path arguments, so you can use the app's own "Open File" / "Open Folder" dialog directly
+
 ## Test
 
 ```bash

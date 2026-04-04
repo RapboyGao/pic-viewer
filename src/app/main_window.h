@@ -12,6 +12,7 @@
 #include <QPixmap>
 #include <QSet>
 #include <QStringList>
+#include <QThreadPool>
 
 class QAction;
 class QActionGroup;
@@ -72,6 +73,8 @@ private:
     ImageViewerWidget* viewer_ = nullptr;
     SlideShowController* slideshow_ = nullptr;
     QListWidget* thumbnailList_ = nullptr;
+    QThreadPool imageDecodePool_;
+    QThreadPool thumbnailDecodePool_;
 
     QLabel* fileStatusLabel_ = nullptr;
     QLabel* indexStatusLabel_ = nullptr;

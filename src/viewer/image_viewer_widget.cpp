@@ -17,7 +17,7 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
 
 void ImageViewerWidget::setImage(const QImage& image)
 {
-    pixmap_ = QPixmap::fromImage(image);
+    image_ = image;
     title_.clear();
     detail_.clear();
     resetViewTransform();
@@ -26,7 +26,7 @@ void ImageViewerWidget::setImage(const QImage& image)
 
 void ImageViewerWidget::setMessage(const QString& title, const QString& detail)
 {
-    pixmap_ = QPixmap();
+    image_ = QImage();
     title_ = title;
     detail_ = detail;
     resetViewTransform();
@@ -83,10 +83,10 @@ void ImageViewerWidget::paintEvent(QPaintEvent* event)
     QPainter painter(this);
     painter.fillRect(rect(), palette().window());
 
-    if (!pixmap_.isNull()) {
+    if (!image_.isNull()) {
         const QRectF target = targetRect();
-        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
-        painter.drawPixmap(target, pixmap_, QRectF(pixmap_.rect()));
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, shouldUseSmoothSampling(target));
+        painter.drawImage(target, image_, QRectF(image_.rect()));
         return;
     }
 
@@ -110,7 +110,7 @@ void ImageViewerWidget::paintEvent(QPaintEvent* event)
 
 void ImageViewerWidget::wheelEvent(QWheelEvent* event)
 {
-    if (pixmap_.isNull()) {
+    if (image_.isNull()) {
         event->ignore();
         return;
     }
@@ -122,7 +122,7 @@ void ImageViewerWidget::wheelEvent(QWheelEvent* event)
 
 void ImageViewerWidget::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton && !pixmap_.isNull()) {
+    if (event->button() == Qt::LeftButton && !image_.isNull()) {
         dragging_ = true;
         lastDragPos_ = event->pos();
         setCursor(Qt::ClosedHandCursor);
@@ -134,7 +134,7 @@ void ImageViewerWidget::mousePressEvent(QMouseEvent* event)
 
 void ImageViewerWidget::mouseMoveEvent(QMouseEvent* event)
 {
-    if (dragging_ && !pixmap_.isNull()) {
+    if (dragging_ && !image_.isNull()) {
         const QPoint delta = event->pos() - lastDragPos_;
         panOffset_ += delta;
         lastDragPos_ = event->pos();
@@ -160,7 +160,7 @@ void ImageViewerWidget::mouseReleaseEvent(QMouseEvent* event)
 void ImageViewerWidget::mouseDoubleClickEvent(QMouseEvent* event)
 {
     Q_UNUSED(event);
-    if (!pixmap_.isNull()) {
+    if (!image_.isNull()) {
         if (zoomFactor_ > 1.01) {
             resetZoom();
         } else {
@@ -177,7 +177,7 @@ void ImageViewerWidget::resizeEvent(QResizeEvent* event)
 
 void ImageViewerWidget::applyZoom(double factor, const QPointF& anchor)
 {
-    if (pixmap_.isNull()) {
+    if (image_.isNull()) {
         return;
     }
 
@@ -196,7 +196,7 @@ void ImageViewerWidget::applyZoom(double factor, const QPointF& anchor)
 
 void ImageViewerWidget::clampPanOffset()
 {
-    if (pixmap_.isNull()) {
+    if (image_.isNull()) {
         panOffset_ = {};
         return;
     }
@@ -232,19 +232,45 @@ QRectF ImageViewerWidget::targetRect() const
 
 QSize ImageViewerWidget::baseSize() const
 {
-    if (pixmap_.isNull()) {
+    if (image_.isNull()) {
         return {};
     }
 
     switch (displayMode_) {
     case DisplayMode::ActualSize:
-        return pixmap_.size();
+        return image_.size();
     case DisplayMode::FillWindow:
-        return pixmap_.size().scaled(size(), Qt::KeepAspectRatioByExpanding);
+        return image_.size().scaled(size(), Qt::KeepAspectRatioByExpanding);
     case DisplayMode::FitToWindow:
     default:
-        return pixmap_.size().scaled(size(), Qt::KeepAspectRatio);
+        return image_.size().scaled(size(), Qt::KeepAspectRatio);
     }
+}
+
+bool ImageViewerWidget::shouldUseSmoothSampling(const QRectF& target) const
+{
+    if (image_.isNull() || image_.width() <= 0 || image_.height() <= 0) {
+        return true;
+    }
+
+    const double scaleX = target.width() / static_cast<double>(image_.width());
+    const double scaleY = target.height() / static_cast<double>(image_.height());
+    const double effectiveScale = std::max(scaleX, scaleY);
+    const int shorterEdge = std::min(image_.width(), image_.height());
+
+    if (effectiveScale <= 1.0) {
+        return true;
+    }
+
+    // Small images look better with pixel edges sooner; large originals can stay
+    // slightly smoothed up to about 2x before switching to crisp pixels.
+    if (shorterEdge <= 720) {
+        return effectiveScale < 1.5;
+    }
+    if (shorterEdge <= 1600) {
+        return effectiveScale < 1.8;
+    }
+    return effectiveScale < 2.0;
 }
 
 void ImageViewerWidget::resetViewTransform()

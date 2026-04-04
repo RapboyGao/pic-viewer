@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug pic-viewer (macOS)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/pic-viewer",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "env": {},
+      "terminal": "integrated",
+      "preLaunchTask": "build pic-viewer",
+      "sourceLanguages": [
+        "cpp"
+      ]
+    },
+    {
+      "name": "Debug pic-viewer (Windows)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}\\build\\pic-viewer.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "integratedTerminal",
+      "preLaunchTask": "build pic-viewer"
+    }
+  ]
+}

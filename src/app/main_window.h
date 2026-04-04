@@ -58,6 +58,7 @@ private:
     void updateThumbnailForPath(const QString& path, const QImage& image);
     void requestThumbnail(const QString& path);
     void preloadThumbnailNeighbors();
+    void requestVisibleThumbnails();
     void updateStatus(const DecodedImage* decoded = nullptr);
     void setIntervalActionChecked(int intervalMs);
     void setDisplayModeChecked(ImageViewerWidget::DisplayMode mode);

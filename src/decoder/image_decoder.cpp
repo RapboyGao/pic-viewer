@@ -2,6 +2,7 @@
 
 #include <QFileInfo>
 #include <QImage>
+#include <QImageReader>
 
 #include <cstdio>
 #include <cstring>
@@ -21,6 +22,22 @@ DecodedImage makeError(const QString& path, const QString& decoder, const QStrin
     result.filePath = path;
     result.decoderName = decoder;
     result.errorMessage = message;
+    return result;
+}
+
+DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
+{
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+
+    DecodedImage result;
+    result.filePath = path;
+    result.decoderName = decoder;
+    result.image = reader.read();
+    result.sourceSize = result.image.size();
+    if (result.image.isNull()) {
+        result.errorMessage = reader.errorString();
+    }
     return result;
 }
 
@@ -45,6 +62,12 @@ DecodedImage decodeJpeg(const QString& path)
     jpeg_start_decompress(&cinfo);
 
     QImage image(cinfo.output_width, cinfo.output_height, QImage::Format_RGB888);
+    if (image.isNull()) {
+        jpeg_finish_decompress(&cinfo);
+        jpeg_destroy_decompress(&cinfo);
+        std::fclose(file);
+        return decodeWithQtReader(path, "qt-imageio");
+    }
     while (cinfo.output_scanline < cinfo.output_height) {
         unsigned char* row = image.scanLine(static_cast<int>(cinfo.output_scanline));
         jpeg_read_scanlines(&cinfo, &row, 1);
@@ -56,9 +79,12 @@ DecodedImage decodeJpeg(const QString& path)
 
     DecodedImage result;
     result.filePath = path;
-    result.image = image.copy();
+    result.image = image.copy().convertToFormat(QImage::Format_RGBA8888);
     result.sourceSize = result.image.size();
     result.decoderName = "jpeg-turbo";
+    if (result.image.isNull()) {
+        return decodeWithQtReader(path, "qt-imageio");
+    }
     return result;
 }
 
@@ -241,17 +267,29 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
 DecodedImage ImageDecoder::decode(const QString& path, DecodeMode mode)
 {
     const ImageFormatKind kind = detectFormat(path);
+    DecodedImage decoded;
     switch (kind) {
     case ImageFormatKind::Jpeg:
-        return decodeJpeg(path);
+        decoded = decodeJpeg(path);
+        break;
     case ImageFormatKind::Heif:
-        return decodeHeif(path);
+        decoded = decodeHeif(path);
+        break;
     case ImageFormatKind::Arw:
-        return decodeArw(path, mode);
+        decoded = decodeArw(path, mode);
+        break;
     case ImageFormatKind::Unknown:
     default:
         return makeError(path, "unknown", "Unsupported image format.");
     }
+
+    if (!decoded.isValid() && kind != ImageFormatKind::Arw) {
+        DecodedImage fallback = decodeWithQtReader(path, "qt-imageio");
+        if (fallback.isValid()) {
+            return fallback;
+        }
+    }
+    return decoded;
 }
 
 ImageFormatKind ImageDecoder::detectFormat(const QString& path)

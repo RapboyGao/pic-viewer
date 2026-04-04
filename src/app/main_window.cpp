@@ -15,7 +15,9 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QScrollBar>
 #include <QStatusBar>
+#include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
@@ -62,6 +64,9 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     });
     connect(thumbnailList_, &QListWidget::itemActivated, this, &MainWindow::thumbnailActivated);
     connect(thumbnailList_, &QListWidget::itemClicked, this, &MainWindow::thumbnailActivated);
+    connect(thumbnailList_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
+        requestVisibleThumbnails();
+    });
 
     if (!startupPath.isEmpty()) {
         openPath(startupPath);
@@ -254,6 +259,7 @@ void MainWindow::refreshCurrentImage()
     requestImage(currentPath_, DecodeMode::FastPreview, true);
     preloadNeighbors();
     preloadThumbnailNeighbors();
+    requestVisibleThumbnails();
 }
 
 void MainWindow::requestImage(const QString& path, DecodeMode mode, bool displayWhenReady)
@@ -475,6 +481,9 @@ void MainWindow::rebuildThumbnailStrip()
     }
     updateThumbnailSelection();
     preloadThumbnailNeighbors();
+    QTimer::singleShot(0, this, [this]() {
+        requestVisibleThumbnails();
+    });
 }
 
 void MainWindow::updateThumbnailSelection()
@@ -545,6 +554,24 @@ void MainWindow::preloadThumbnailNeighbors()
     for (int offset = -4; offset <= 4; ++offset) {
         const int wrapped = (index + offset + total) % total;
         requestThumbnail(paths.at(wrapped));
+    }
+}
+
+void MainWindow::requestVisibleThumbnails()
+{
+    if (!thumbnailList_ || thumbnailList_->count() == 0) {
+        return;
+    }
+
+    const QRect viewportRect = thumbnailList_->viewport()->rect();
+    for (int i = 0; i < thumbnailList_->count(); ++i) {
+        QListWidgetItem* item = thumbnailList_->item(i);
+        const QRect itemRect = thumbnailList_->visualItemRect(item);
+        if (itemRect.right() < viewportRect.left() - kThumbnailSize
+            || itemRect.left() > viewportRect.right() + kThumbnailSize) {
+            continue;
+        }
+        requestThumbnail(item->data(Qt::UserRole).toString());
     }
 }
 

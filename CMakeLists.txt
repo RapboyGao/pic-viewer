@@ -13,6 +13,10 @@ set(CMAKE_AUTOUIC ON)
 include(GNUInstallDirs)
 include(CTest)
 
+if(APPLE)
+    set(WrapOpenGL_AGL "${CMAKE_OSX_SYSROOT}/System/Library/Frameworks/OpenGL.framework" CACHE FILEPATH "Compatibility shim for Qt WrapOpenGL on modern macOS" FORCE)
+endif()
+
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Concurrent Test)
 find_package(JPEG REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -22,7 +26,17 @@ pkg_check_modules(LIBRAW REQUIRED IMPORTED_TARGET libraw)
 
 qt_standard_project_setup()
 
+if(APPLE)
+    get_target_property(QT_GUI_LINK_LIBS Qt6::Gui INTERFACE_LINK_LIBRARIES)
+    if(QT_GUI_LINK_LIBS)
+        list(REMOVE_ITEM QT_GUI_LINK_LIBS "AGL")
+        list(REMOVE_ITEM QT_GUI_LINK_LIBS "-framework AGL")
+        set_target_properties(Qt6::Gui PROPERTIES INTERFACE_LINK_LIBRARIES "${QT_GUI_LINK_LIBS}")
+    endif()
+endif()
+
 set(PIC_VIEWER_SOURCES
+    assets/resources.qrc
     src/app/main.cpp
     src/app/main_window.cpp
     src/catalog/image_catalog.cpp
@@ -105,9 +119,6 @@ install(TARGETS pic-viewer
 )
 
 qt_finalize_executable(pic-viewer)
-qt_finalize_executable(test_image_catalog)
-qt_finalize_executable(test_slide_show_controller)
-qt_finalize_executable(test_image_decoder)
 
 add_test(NAME test_image_catalog COMMAND test_image_catalog)
 add_test(NAME test_slide_show_controller COMMAND test_slide_show_controller)

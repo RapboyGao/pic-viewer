@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="icons/app_icon.xpm">app_icon.xpm</file>
+    </qresource>
+</RCC>

@@ -11,6 +11,7 @@
 #include <QMainWindow>
 #include <QPixmap>
 #include <QSet>
+#include <QStringList>
 
 class QAction;
 class QActionGroup;
@@ -59,6 +60,7 @@ private:
     void requestThumbnail(const QString& path);
     void preloadThumbnailNeighbors();
     void requestVisibleThumbnails();
+    void processPendingThumbnailRequests();
     void updateStatus(const DecodedImage* decoded = nullptr);
     void setIntervalActionChecked(int intervalMs);
     void setDisplayModeChecked(ImageViewerWidget::DisplayMode mode);
@@ -84,4 +86,5 @@ private:
     QString currentPath_;
     QHash<QString, QPixmap> thumbnailCache_;
     QSet<QString> thumbnailRequestsInFlight_;
+    QStringList thumbnailRequestQueue_;
 };

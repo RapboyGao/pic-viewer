@@ -8,6 +8,7 @@ class ImageDecoder
 {
 public:
     static DecodedImage decode(const QString& path, DecodeMode mode);
+    static QImage decodeThumbnail(const QString& path, int maxEdge);
     static ImageFormatKind detectFormat(const QString& path);
     static QString decoderName(ImageFormatKind kind);
     static QStringList supportedExtensions();

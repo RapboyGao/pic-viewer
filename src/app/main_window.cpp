@@ -25,6 +25,7 @@ namespace {
 
 constexpr int kDefaultIntervalMs = 3000;
 constexpr int kThumbnailSize = 96;
+constexpr int kMaxThumbnailInflight = 2;
 
 QString modeLabelForAction(int intervalMs)
 {
@@ -231,6 +232,7 @@ void MainWindow::openPath(const QString& path)
         cache_.clear();
         thumbnailCache_.clear();
         thumbnailRequestsInFlight_.clear();
+        thumbnailRequestQueue_.clear();
         rebuildThumbnailStrip();
         updateStatus();
         return;
@@ -239,6 +241,7 @@ void MainWindow::openPath(const QString& path)
     cache_.clear();
     thumbnailCache_.clear();
     thumbnailRequestsInFlight_.clear();
+    thumbnailRequestQueue_.clear();
     rebuildThumbnailStrip();
     refreshCurrentImage();
 }
@@ -258,8 +261,6 @@ void MainWindow::refreshCurrentImage()
 
     requestImage(currentPath_, DecodeMode::FastPreview, true);
     preloadNeighbors();
-    preloadThumbnailNeighbors();
-    requestVisibleThumbnails();
 }
 
 void MainWindow::requestImage(const QString& path, DecodeMode mode, bool displayWhenReady)
@@ -333,6 +334,8 @@ void MainWindow::displayDecodedImage(const DecodedImage& image)
     if (image.isValid()) {
         viewer_->setImage(image.image);
         updateThumbnailForPath(image.filePath, image.image);
+        preloadThumbnailNeighbors();
+        requestVisibleThumbnails();
     } else {
         viewer_->setMessage("Failed to decode image", image.errorMessage);
     }
@@ -480,7 +483,6 @@ void MainWindow::rebuildThumbnailStrip()
         }
     }
     updateThumbnailSelection();
-    preloadThumbnailNeighbors();
     QTimer::singleShot(0, this, [this]() {
         requestVisibleThumbnails();
     });
@@ -519,27 +521,15 @@ void MainWindow::updateThumbnailForPath(const QString& path, const QImage& image
 
 void MainWindow::requestThumbnail(const QString& path)
 {
-    if (path.isEmpty() || thumbnailCache_.contains(thumbnailKey(path)) || thumbnailRequestsInFlight_.contains(path)) {
+    if (path.isEmpty()
+        || thumbnailCache_.contains(thumbnailKey(path))
+        || thumbnailRequestsInFlight_.contains(path)
+        || thumbnailRequestQueue_.contains(path)) {
         return;
     }
 
-    thumbnailRequestsInFlight_.insert(path);
-    auto* watcher = new QFutureWatcher<QImage>(this);
-    connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path]() {
-        const QImage image = watcher->result();
-        watcher->deleteLater();
-        thumbnailRequestsInFlight_.remove(path);
-        if (!image.isNull()) {
-            updateThumbnailForPath(path, image);
-        }
-    });
-    watcher->setFuture(QtConcurrent::run([path]() -> QImage {
-        const DecodedImage decoded = ImageDecoder::decode(path, DecodeMode::FastPreview);
-        if (!decoded.isValid()) {
-            return {};
-        }
-        return decoded.image;
-    }));
+    thumbnailRequestQueue_.push_back(path);
+    processPendingThumbnailRequests();
 }
 
 void MainWindow::preloadThumbnailNeighbors()
@@ -572,6 +562,27 @@ void MainWindow::requestVisibleThumbnails()
             continue;
         }
         requestThumbnail(item->data(Qt::UserRole).toString());
+    }
+}
+
+void MainWindow::processPendingThumbnailRequests()
+{
+    while (!thumbnailRequestQueue_.isEmpty() && thumbnailRequestsInFlight_.size() < kMaxThumbnailInflight) {
+        const QString path = thumbnailRequestQueue_.takeFirst();
+        thumbnailRequestsInFlight_.insert(path);
+        auto* watcher = new QFutureWatcher<QImage>(this);
+        connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path]() {
+            const QImage image = watcher->result();
+            watcher->deleteLater();
+            thumbnailRequestsInFlight_.remove(path);
+            if (!image.isNull()) {
+                updateThumbnailForPath(path, image);
+            }
+            processPendingThumbnailRequests();
+        });
+        watcher->setFuture(QtConcurrent::run([path]() -> QImage {
+            return ImageDecoder::decodeThumbnail(path, kThumbnailSize);
+        }));
     }
 }
 

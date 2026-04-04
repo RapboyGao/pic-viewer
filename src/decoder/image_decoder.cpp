@@ -41,6 +41,17 @@ DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
     return result;
 }
 
+QImage loadScaledWithQtReader(const QString& path, int maxEdge)
+{
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    const QSize sourceSize = reader.size();
+    if (sourceSize.isValid() && maxEdge > 0) {
+        reader.setScaledSize(sourceSize.scaled(maxEdge, maxEdge, Qt::KeepAspectRatio));
+    }
+    return reader.read();
+}
+
 DecodedImage decodeJpeg(const QString& path)
 {
     FILE* file = std::fopen(path.toUtf8().constData(), "rb");
@@ -139,6 +150,59 @@ DecodedImage decodeHeif(const QString& path)
     result.sourceSize = result.image.size();
     result.decoderName = "libheif";
     return result;
+}
+
+QImage decodeHeifThumbnail(const QString& path, int maxEdge)
+{
+    heif_context* rawContext = heif_context_alloc();
+    if (!rawContext) {
+        return {};
+    }
+    std::unique_ptr<heif_context, decltype(&heif_context_free)> context(rawContext, &heif_context_free);
+
+    const heif_error readError = heif_context_read_from_file(context.get(), path.toUtf8().constData(), nullptr);
+    if (readError.code != heif_error_Ok) {
+        return {};
+    }
+
+    heif_image_handle* rawHandle = nullptr;
+    const heif_error handleError = heif_context_get_primary_image_handle(context.get(), &rawHandle);
+    if (handleError.code != heif_error_Ok) {
+        return {};
+    }
+    std::unique_ptr<heif_image_handle, decltype(&heif_image_handle_release)> handle(rawHandle, &heif_image_handle_release);
+
+    const int count = heif_image_handle_get_number_of_thumbnails(handle.get());
+    if (count > 0) {
+        std::vector<heif_item_id> ids(count);
+        heif_image_handle_get_list_of_thumbnail_IDs(handle.get(), ids.data(), count);
+        heif_image_handle* rawThumbHandle = nullptr;
+        const heif_error thumbError = heif_image_handle_get_thumbnail(handle.get(), ids.front(), &rawThumbHandle);
+        if (thumbError.code == heif_error_Ok && rawThumbHandle) {
+            std::unique_ptr<heif_image_handle, decltype(&heif_image_handle_release)> thumbHandle(rawThumbHandle, &heif_image_handle_release);
+            heif_image* rawThumbImage = nullptr;
+            const heif_error decodeError = heif_decode_image(
+                thumbHandle.get(),
+                &rawThumbImage,
+                heif_colorspace_RGB,
+                heif_chroma_interleaved_RGBA,
+                nullptr);
+            if (decodeError.code == heif_error_Ok && rawThumbImage) {
+                std::unique_ptr<heif_image, decltype(&heif_image_release)> thumbImage(rawThumbImage, &heif_image_release);
+                int stride = 0;
+                const uint8_t* data = heif_image_get_plane_readonly(thumbImage.get(), heif_channel_interleaved, &stride);
+                const int width = heif_image_get_width(thumbImage.get(), heif_channel_interleaved);
+                const int height = heif_image_get_height(thumbImage.get(), heif_channel_interleaved);
+                if (data && width > 0 && height > 0) {
+                    return QImage(data, width, height, stride, QImage::Format_RGBA8888)
+                        .copy()
+                        .scaled(maxEdge, maxEdge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                }
+            }
+        }
+    }
+
+    return loadScaledWithQtReader(path, maxEdge);
 }
 
 DecodedImage decodeArw(const QString& path, DecodeMode mode)
@@ -262,6 +326,15 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     return result;
 }
 
+QImage decodeArwThumbnail(const QString& path, int maxEdge)
+{
+    DecodedImage decoded = decodeArw(path, DecodeMode::FastPreview);
+    if (!decoded.isValid()) {
+        return {};
+    }
+    return decoded.image.scaled(maxEdge, maxEdge, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+}
+
 } // namespace
 
 DecodedImage ImageDecoder::decode(const QString& path, DecodeMode mode)
@@ -290,6 +363,30 @@ DecodedImage ImageDecoder::decode(const QString& path, DecodeMode mode)
         }
     }
     return decoded;
+}
+
+QImage ImageDecoder::decodeThumbnail(const QString& path, int maxEdge)
+{
+    const ImageFormatKind kind = detectFormat(path);
+    switch (kind) {
+    case ImageFormatKind::Jpeg: {
+        QImage image = loadScaledWithQtReader(path, maxEdge);
+        if (!image.isNull()) {
+            return image;
+        }
+        DecodedImage decoded = decodeJpeg(path);
+        return decoded.isValid()
+            ? decoded.image.scaled(maxEdge, maxEdge, Qt::KeepAspectRatio, Qt::SmoothTransformation)
+            : QImage();
+    }
+    case ImageFormatKind::Heif:
+        return decodeHeifThumbnail(path, maxEdge);
+    case ImageFormatKind::Arw:
+        return decodeArwThumbnail(path, maxEdge);
+    case ImageFormatKind::Unknown:
+    default:
+        return {};
+    }
 }
 
 ImageFormatKind ImageDecoder::detectFormat(const QString& path)

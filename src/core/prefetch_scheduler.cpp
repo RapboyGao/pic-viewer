@@ -37,7 +37,8 @@ QList<PrefetchScheduler::Request> PrefetchScheduler::planImageRequests(
     const QStringList& paths,
     int currentIndex,
     Direction direction,
-    int maxDistance) const
+    int maxDistance,
+    int maxRequests) const
 {
     QList<Request> requests;
     if (paths.isEmpty() || currentIndex < 0 || currentIndex >= paths.size()) {
@@ -47,10 +48,16 @@ QList<PrefetchScheduler::Request> PrefetchScheduler::planImageRequests(
     const int limit = clampMaxDistance(paths.size(), maxDistance);
     const QString currentPath = paths.at(currentIndex);
     requests.push_back({currentPath, DecodeMode::FastPreview, 0});
+    if (maxRequests > 0 && requests.size() >= maxRequests) {
+        return requests;
+    }
 
     const QList<int> offsets = buildOffsetOrder(direction, limit);
     int priority = 1;
     for (int offset : offsets) {
+        if (maxRequests > 0 && requests.size() >= maxRequests) {
+            return requests;
+        }
         const int index = currentIndex + offset;
         if (index < 0 || index >= paths.size()) {
             continue;
@@ -62,8 +69,11 @@ QList<PrefetchScheduler::Request> PrefetchScheduler::planImageRequests(
         requests.push_back({path, DecodeMode::FastPreview, priority++});
     }
 
-    if (requests.size() < paths.size()) {
+    if ((maxRequests <= 0 || requests.size() < maxRequests) && requests.size() < paths.size()) {
         for (int index = 0; index < paths.size(); ++index) {
+            if (maxRequests > 0 && requests.size() >= maxRequests) {
+                return requests;
+            }
             const QString path = paths.at(index);
             if (path == currentPath || std::any_of(requests.begin(), requests.end(), [&path](const Request& request) {
                     return request.path == path;
@@ -81,7 +91,8 @@ QList<int> PrefetchScheduler::orderedIndices(
     int count,
     int currentIndex,
     Direction direction,
-    int maxDistance) const
+    int maxDistance,
+    int maxCount) const
 {
     QList<int> indices;
     if (count <= 0 || currentIndex < 0 || currentIndex >= count) {
@@ -90,14 +101,23 @@ QList<int> PrefetchScheduler::orderedIndices(
 
     const int limit = clampMaxDistance(count, maxDistance);
     indices.push_back(currentIndex);
+    if (maxCount > 0 && indices.size() >= maxCount) {
+        return indices;
+    }
     const QList<int> offsets = buildOffsetOrder(direction, limit);
     for (int offset : offsets) {
+        if (maxCount > 0 && indices.size() >= maxCount) {
+            return indices;
+        }
         const int index = currentIndex + offset;
         if (index >= 0 && index < count && !indices.contains(index)) {
             indices.push_back(index);
         }
     }
     for (int index = 0; index < count; ++index) {
+        if (maxCount > 0 && indices.size() >= maxCount) {
+            return indices;
+        }
         if (!indices.contains(index)) {
             indices.push_back(index);
         }

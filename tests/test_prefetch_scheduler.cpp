@@ -11,6 +11,7 @@ class PrefetchSchedulerTest : public QObject
 private slots:
     void ordersCurrentThenDirectionallyAdjacent();
     void fallsBackToRemainingImages();
+    void limitsRequestedCount();
 };
 
 void PrefetchSchedulerTest::ordersCurrentThenDirectionallyAdjacent()
@@ -40,6 +41,23 @@ void PrefetchSchedulerTest::fallsBackToRemainingImages()
     QVERIFY(std::any_of(requests.begin(), requests.end(), [](const PrefetchScheduler::Request& request) {
         return request.path == "d.jpg";
     }));
+}
+
+void PrefetchSchedulerTest::limitsRequestedCount()
+{
+    PrefetchScheduler scheduler;
+    const QStringList paths = {"a.jpg", "b.jpg", "c.jpg", "d.jpg", "e.jpg"};
+
+    const QList<PrefetchScheduler::Request> requests = scheduler.planImageRequests(
+        paths,
+        2,
+        PrefetchScheduler::Direction::Forward,
+        4,
+        3);
+
+    QCOMPARE(requests.size(), 3);
+    QCOMPARE(requests.value(0).path, QString("c.jpg"));
+    QVERIFY(requests.size() <= 3);
 }
 
 QTEST_MAIN(PrefetchSchedulerTest)

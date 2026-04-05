@@ -25,11 +25,13 @@ public:
         const QStringList& paths,
         int currentIndex,
         Direction direction,
-        int maxDistance = 0) const;
+        int maxDistance = 0,
+        int maxRequests = 0) const;
 
     QList<int> orderedIndices(
         int count,
         int currentIndex,
         Direction direction,
-        int maxDistance = 0) const;
+        int maxDistance = 0,
+        int maxCount = 0) const;
 };

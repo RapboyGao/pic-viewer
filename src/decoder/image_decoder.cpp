@@ -316,10 +316,13 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     }
 
     // Keep the full RAW output visually consistent with the embedded preview.
-    // Disabling auto-brightness makes many Sony RAW files look noticeably darker
-    // once the background full-quality pass replaces the preview.
+    // Apply the camera crop after unpacking so vendor inset crops do not turn
+    // into black borders on the full-quality pass.
+    rawProcessor.adjust_to_raw_inset_crop(1);
     rawProcessor.imgdata.params.use_camera_wb = 1;
+    rawProcessor.imgdata.params.use_camera_matrix = 1;
     rawProcessor.imgdata.params.no_auto_bright = 0;
+    rawProcessor.imgdata.params.adjust_maximum_thr = 0.0f;
 
     const int processResult = rawProcessor.dcraw_process();
     if (processResult != LIBRAW_SUCCESS) {

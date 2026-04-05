@@ -118,6 +118,8 @@ private:
     QString currentPath_;
     QString displayedPath_;
     QHash<QString, QPixmap> thumbnailCache_;
+    QStringList thumbnailCacheLru_;
+    qint64 thumbnailCacheBytes_ = 0;
     QSet<QString> thumbnailRequestsInFlight_;
     QList<ThumbnailJob> thumbnailRequestQueue_;
     QSet<QString> imagePrefetchRequestsInFlight_;

@@ -39,17 +39,29 @@ constexpr int kDecodeThreadStackSize = 8 * 1024 * 1024;
 constexpr int kThumbnailStripExpandedHeight = kThumbnailSize + 48;
 constexpr int kThumbnailRevealMargin = 96;
 constexpr int kImagePrefetchWindow = 6;
+constexpr int kMaxQueuedThumbnailRequests = 64;
+constexpr int kMaxQueuedImagePrefetchRequests = 24;
+constexpr qint64 kThumbnailCacheBudgetBytes = 48LL * 1024 * 1024;
+constexpr qint64 kImageCacheBudgetBytes = 256LL * 1024 * 1024;
 
 QString modeLabelForAction(int intervalMs)
 {
     return QString("%1 s").arg(intervalMs / 1000);
 }
 
+qint64 estimatePixmapCost(const QPixmap& pixmap)
+{
+    if (pixmap.isNull()) {
+        return 0;
+    }
+    return std::max<qint64>(1, static_cast<qint64>(pixmap.width()) * pixmap.height() * 4);
+}
+
 } // namespace
 
 MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     : QMainWindow(parent)
-    , cache_(6)
+    , cache_(6, kImageCacheBudgetBytes)
 {
     setWindowTitle("pic-viewer");
     setWindowIcon(QIcon(":/icons/app_icon.xpm"));
@@ -318,6 +330,8 @@ void MainWindow::openPath(const QString& path)
         displayedPath_.clear();
         cache_.clear();
         thumbnailCache_.clear();
+        thumbnailCacheLru_.clear();
+        thumbnailCacheBytes_ = 0;
         thumbnailRequestsInFlight_.clear();
         thumbnailRequestQueue_.clear();
         rebuildThumbnailStrip();
@@ -332,6 +346,8 @@ void MainWindow::openPath(const QString& path)
 
     cache_.clear();
     thumbnailCache_.clear();
+    thumbnailCacheLru_.clear();
+    thumbnailCacheBytes_ = 0;
     thumbnailRequestsInFlight_.clear();
     thumbnailRequestQueue_.clear();
     imagePrefetchRequestsInFlight_.clear();
@@ -407,7 +423,8 @@ void MainWindow::queuePrefetchForCurrentContext()
         paths,
         catalog_.currentIndex(),
         browseDirection_,
-        kImagePrefetchWindow);
+        kImagePrefetchWindow,
+        kMaxQueuedImagePrefetchRequests);
     QList<PrefetchScheduler::Request> filtered;
     filtered.reserve(requests.size());
     for (const auto& request : requests) {
@@ -607,7 +624,23 @@ void MainWindow::updateThumbnailForPath(const QString& path, const QImage& image
 
     const QPixmap thumb = QPixmap::fromImage(
         image.scaled(kThumbnailSize, kThumbnailSize, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    thumbnailCache_.insert(thumbnailKey(path), thumb);
+    const QString key = thumbnailKey(path);
+    if (thumbnailCache_.contains(key)) {
+        thumbnailCacheBytes_ -= std::max<qint64>(1, static_cast<qint64>(thumbnailCache_.value(key).width()) * thumbnailCache_.value(key).height() * 4);
+        thumbnailCacheLru_.removeAll(key);
+    }
+    thumbnailCache_.insert(key, thumb);
+    thumbnailCacheBytes_ += estimatePixmapCost(thumb);
+    thumbnailCacheLru_.prepend(key);
+    while (thumbnailCacheBytes_ > kThumbnailCacheBudgetBytes && !thumbnailCacheLru_.isEmpty()) {
+        const QString oldest = thumbnailCacheLru_.takeLast();
+        if (!thumbnailCache_.contains(oldest)) {
+            continue;
+        }
+        const QPixmap removed = thumbnailCache_.value(oldest);
+        thumbnailCacheBytes_ -= estimatePixmapCost(removed);
+        thumbnailCache_.remove(oldest);
+    }
 
     for (int i = 0; i < thumbnailList_->count(); ++i) {
         QListWidgetItem* item = thumbnailList_->item(i);
@@ -635,6 +668,13 @@ void MainWindow::enqueueThumbnailRequest(const QString& path, int priority)
         return;
     }
 
+    if (thumbnailRequestQueue_.size() >= kMaxQueuedThumbnailRequests) {
+        const ThumbnailJob worst = thumbnailRequestQueue_.back();
+        if (priority >= worst.priority) {
+            return;
+        }
+        thumbnailRequestQueue_.removeLast();
+    }
     thumbnailRequestQueue_.push_back({path, priority});
     std::stable_sort(thumbnailRequestQueue_.begin(), thumbnailRequestQueue_.end(), [](const ThumbnailJob& lhs, const ThumbnailJob& rhs) {
         return lhs.priority < rhs.priority;
@@ -710,6 +750,13 @@ void MainWindow::enqueueImagePrefetchRequest(const QString& path, DecodeMode mod
         return;
     }
 
+    if (imagePrefetchRequestQueue_.size() >= kMaxQueuedImagePrefetchRequests) {
+        const ImagePrefetchJob worst = imagePrefetchRequestQueue_.back();
+        if (priority >= worst.priority) {
+            return;
+        }
+        imagePrefetchRequestQueue_.removeLast();
+    }
     imagePrefetchRequestQueue_.push_back({path, mode, priority});
     std::stable_sort(imagePrefetchRequestQueue_.begin(), imagePrefetchRequestQueue_.end(), [](const ImagePrefetchJob& lhs, const ImagePrefetchJob& rhs) {
         return lhs.priority < rhs.priority;

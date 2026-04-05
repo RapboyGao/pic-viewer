@@ -6,6 +6,8 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QCursor>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -27,6 +29,8 @@ constexpr int kDefaultIntervalMs = 3000;
 constexpr int kThumbnailSize = 96;
 constexpr int kMaxThumbnailInflight = 2;
 constexpr int kDecodeThreadStackSize = 8 * 1024 * 1024;
+constexpr int kThumbnailStripExpandedHeight = kThumbnailSize + 48;
+constexpr int kThumbnailRevealMargin = 96;
 
 QString modeLabelForAction(int intervalMs)
 {
@@ -57,11 +61,20 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     viewer_ = new ImageViewerWidget(central);
     layout->addWidget(viewer_, 1);
     createThumbnailStrip();
-    layout->addWidget(thumbnailList_);
+    layout->addWidget(thumbnailStripContainer_);
     setCentralWidget(central);
 
     slideshow_ = new SlideShowController(this);
     slideshow_->setIntervalMs(kDefaultIntervalMs);
+    thumbnailStripAnimation_ = new QPropertyAnimation(thumbnailStripContainer_, "maximumHeight", this);
+    thumbnailStripAnimation_->setDuration(180);
+    connect(thumbnailStripAnimation_, &QPropertyAnimation::valueChanged, this, [this](const QVariant& value) {
+        const int height = value.toInt();
+        thumbnailStripContainer_->setMinimumHeight(height);
+    });
+    thumbnailAutoHideTimer_ = new QTimer(this);
+    thumbnailAutoHideTimer_->setSingleShot(true);
+    thumbnailAutoHideTimer_->setInterval(1200);
 
     createMenus();
     createStatusBar();
@@ -75,6 +88,16 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     connect(thumbnailList_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
         requestVisibleThumbnails();
     });
+    connect(thumbnailAutoHideTimer_, &QTimer::timeout, this, [this]() {
+        if (thumbnailAutoHideEnabled_) {
+            applyThumbnailStripVisibility(false, true);
+        }
+    });
+
+    viewer_->installEventFilter(this);
+    thumbnailList_->installEventFilter(this);
+    thumbnailList_->viewport()->installEventFilter(this);
+    centralWidget()->installEventFilter(this);
 
     if (!startupPath.isEmpty()) {
         openPath(startupPath);
@@ -118,6 +141,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
             return;
         }
         break;
+    case Qt::Key_T:
+        toggleThumbnailStrip();
+        return;
     default:
         break;
     }
@@ -130,7 +156,7 @@ void MainWindow::openFile()
         this,
         "Open Image",
         {},
-        "Images (*.jpg *.jpeg *.heif *.heic *.hif *.arw)");
+        "Images (*.apng *.avif *.avifs *.bmp *.dib *.exr *.gif *.hdr *.heic *.heif *.hif *.ico *.icon *.jfif *.jp2 *.jpe *.jpeg *.jpg *.jxl *.jxr *.pbm *.pfm *.pgm *.pic *.png *.pnm *.ppm *.psd *.pxm *.qoi *.ras *.sr *.svg *.tga *.tif *.tiff *.webp *.wp2 *.3fr *.ari *.arw *.bay *.cap *.cr2 *.cr3 *.crw *.dcr *.dcs *.dng *.drf *.eip *.erf *.fff *.gpr *.iiq *.k25 *.kdc *.mdc *.mef *.mos *.mrw *.nef *.nrw *.orf *.pef *.ptx *.r3d *.raf *.raw *.rw2 *.rwl *.rwz *.sr2 *.srf *.srw *.x3f)");
     if (!path.isEmpty()) {
         openPath(path);
     }
@@ -218,6 +244,12 @@ void MainWindow::createMenus()
     displayModeActionGroup_->addAction(fillAction);
 
     setDisplayModeChecked(viewer_->displayMode());
+    viewMenu->addSeparator();
+    thumbnailStripAction_ = viewMenu->addAction("Show Thumbnail Strip", Qt::Key_T, this, &MainWindow::toggleThumbnailStrip);
+    thumbnailStripAction_->setCheckable(true);
+    thumbnailAutoHideAction_ = viewMenu->addAction("Auto-hide Thumbnail Strip", this, &MainWindow::toggleAutoHideThumbnailStrip);
+    thumbnailAutoHideAction_->setCheckable(true);
+    updateThumbnailActions();
 }
 
 void MainWindow::createStatusBar()
@@ -464,7 +496,13 @@ QString MainWindow::currentDisplayModeLabel(const DecodedImage* decoded) const
 
 void MainWindow::createThumbnailStrip()
 {
-    thumbnailList_ = new QListWidget(this);
+    thumbnailStripContainer_ = new QWidget(this);
+    thumbnailStripContainer_->setMaximumHeight(kThumbnailStripExpandedHeight);
+    auto* layout = new QVBoxLayout(thumbnailStripContainer_);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    thumbnailList_ = new QListWidget(thumbnailStripContainer_);
     thumbnailList_->setViewMode(QListView::IconMode);
     thumbnailList_->setFlow(QListView::LeftToRight);
     thumbnailList_->setResizeMode(QListView::Adjust);
@@ -472,9 +510,10 @@ void MainWindow::createThumbnailStrip()
     thumbnailList_->setWrapping(false);
     thumbnailList_->setSpacing(8);
     thumbnailList_->setIconSize(QSize(kThumbnailSize, kThumbnailSize));
-    thumbnailList_->setMaximumHeight(kThumbnailSize + 48);
+    thumbnailList_->setMaximumHeight(kThumbnailStripExpandedHeight);
     thumbnailList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     thumbnailList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    layout->addWidget(thumbnailList_);
 }
 
 void MainWindow::rebuildThumbnailStrip()
@@ -607,4 +646,93 @@ void MainWindow::setDisplayModeChecked(ImageViewerWidget::DisplayMode mode)
 QString MainWindow::thumbnailKey(const QString& path) const
 {
     return path;
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event)
+{
+    if (thumbnailAutoHideEnabled_) {
+        if (event->type() == QEvent::MouseMove || event->type() == QEvent::Enter) {
+            maybeShowThumbnailStripForCursor();
+        } else if (event->type() == QEvent::Leave) {
+            if (watched == thumbnailList_ || watched == thumbnailList_->viewport()) {
+                thumbnailAutoHideTimer_->start();
+            }
+        }
+    }
+
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::toggleThumbnailStrip()
+{
+    setThumbnailStripVisible(!thumbnailStripVisible_);
+}
+
+void MainWindow::setThumbnailStripVisible(bool visible)
+{
+    thumbnailAutoHideEnabled_ = false;
+    if (thumbnailAutoHideAction_) {
+        thumbnailAutoHideAction_->setChecked(false);
+    }
+    applyThumbnailStripVisibility(visible, true);
+}
+
+void MainWindow::toggleAutoHideThumbnailStrip()
+{
+    thumbnailAutoHideEnabled_ = !thumbnailAutoHideEnabled_;
+    if (!thumbnailAutoHideEnabled_) {
+        thumbnailAutoHideTimer_->stop();
+        applyThumbnailStripVisibility(true, true);
+    } else {
+        applyThumbnailStripVisibility(false, true);
+    }
+    updateThumbnailActions();
+}
+
+void MainWindow::applyThumbnailStripVisibility(bool visible, bool animated)
+{
+    thumbnailStripVisible_ = visible;
+    updateThumbnailActions();
+
+    thumbnailStripAnimation_->stop();
+    const int targetHeight = visible ? kThumbnailStripExpandedHeight : 0;
+    if (!animated) {
+        thumbnailStripContainer_->setMaximumHeight(targetHeight);
+        thumbnailStripContainer_->setMinimumHeight(targetHeight);
+        return;
+    }
+
+    thumbnailStripAnimation_->setStartValue(thumbnailStripContainer_->maximumHeight());
+    thumbnailStripAnimation_->setEndValue(targetHeight);
+    thumbnailStripAnimation_->start();
+}
+
+void MainWindow::updateThumbnailActions()
+{
+    if (thumbnailStripAction_) {
+        thumbnailStripAction_->setChecked(thumbnailStripVisible_);
+        thumbnailStripAction_->setText(thumbnailStripVisible_ ? "Hide Thumbnail Strip" : "Show Thumbnail Strip");
+    }
+    if (thumbnailAutoHideAction_) {
+        thumbnailAutoHideAction_->setChecked(thumbnailAutoHideEnabled_);
+    }
+}
+
+void MainWindow::maybeShowThumbnailStripForCursor()
+{
+    if (!thumbnailAutoHideEnabled_ || !centralWidget()) {
+        return;
+    }
+
+    const QPoint localPos = centralWidget()->mapFromGlobal(QCursor::pos());
+    const QRect area = centralWidget()->rect();
+    const bool nearBottom = localPos.y() >= area.height() - kThumbnailRevealMargin;
+    const bool insideStrip = thumbnailStripContainer_->geometry().contains(localPos);
+
+    if (nearBottom || insideStrip) {
+        thumbnailAutoHideTimer_->stop();
+        applyThumbnailStripVisibility(true, true);
+    } else {
+        thumbnailAutoHideTimer_->start();
+    }
 }

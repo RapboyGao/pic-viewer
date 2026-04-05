@@ -14,8 +14,11 @@ private slots:
 void ImageDecoderTest::detectsFormats()
 {
     QCOMPARE(ImageDecoder::detectFormat("foo.jpg"), ImageFormatKind::Jpeg);
+    QCOMPARE(ImageDecoder::detectFormat("foo.jfif"), ImageFormatKind::Jpeg);
     QCOMPARE(ImageDecoder::detectFormat("foo.HEIC"), ImageFormatKind::Heif);
+    QCOMPARE(ImageDecoder::detectFormat("foo.avif"), ImageFormatKind::Heif);
     QCOMPARE(ImageDecoder::detectFormat("foo.arw"), ImageFormatKind::Arw);
+    QCOMPARE(ImageDecoder::detectFormat("foo.cr3"), ImageFormatKind::Arw);
     QCOMPARE(ImageDecoder::detectFormat("foo.png"), ImageFormatKind::Unknown);
 }
 

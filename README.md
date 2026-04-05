@@ -8,7 +8,9 @@ The app includes a built-in viewer icon resource at `assets/app_icon.xpm`.
 
 - JPEG via `jpeg-turbo`
 - HEIF / HEIC / HIF via `libheif`
-- ARW via `LibRaw`
+- AVIF / AVIFS via `libheif`
+- Broad raster support via Qt image plugins: PNG, GIF, BMP, TIFF, WebP, ICO, SVG, JPEG 2000, EXR, and more when the plugin is present
+- Broad RAW support via `LibRaw`: ARW, CR2, CR3, DNG, NEF, ORF, RAF, RW2, SRW, X3F, and other LibRaw-supported cameras
 - Open a file or folder
 - Previous / next navigation with `Left`, `Right`, `PageUp`, `PageDown`
 - Slideshow playback with `Space`

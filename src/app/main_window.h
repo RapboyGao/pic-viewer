@@ -10,9 +10,11 @@
 #include <QListWidget>
 #include <QMainWindow>
 #include <QPixmap>
+#include <QPropertyAnimation>
 #include <QSet>
 #include <QStringList>
 #include <QThreadPool>
+#include <QTimer>
 
 class QAction;
 class QActionGroup;
@@ -29,6 +31,7 @@ public:
 
 protected:
     void keyPressEvent(QKeyEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
     void openFile();
@@ -43,12 +46,18 @@ private slots:
     void setFitToWindowMode();
     void setActualSizeMode();
     void setFillWindowMode();
+    void toggleThumbnailStrip();
+    void setThumbnailStripVisible(bool visible);
+    void toggleAutoHideThumbnailStrip();
     void thumbnailActivated(QListWidgetItem* item);
 
 private:
     void createMenus();
     void createStatusBar();
     void createThumbnailStrip();
+    void applyThumbnailStripVisibility(bool visible, bool animated);
+    void updateThumbnailActions();
+    void maybeShowThumbnailStripForCursor();
     void openPath(const QString& path);
     void refreshCurrentImage();
     void requestImage(const QString& path, DecodeMode mode, bool displayWhenReady);
@@ -73,6 +82,7 @@ private:
     ImageViewerWidget* viewer_ = nullptr;
     SlideShowController* slideshow_ = nullptr;
     QListWidget* thumbnailList_ = nullptr;
+    QWidget* thumbnailStripContainer_ = nullptr;
     QThreadPool imageDecodePool_;
     QThreadPool thumbnailDecodePool_;
 
@@ -82,6 +92,8 @@ private:
 
     QAction* playPauseAction_ = nullptr;
     QAction* fullscreenAction_ = nullptr;
+    QAction* thumbnailStripAction_ = nullptr;
+    QAction* thumbnailAutoHideAction_ = nullptr;
     QActionGroup* intervalActionGroup_ = nullptr;
     QActionGroup* displayModeActionGroup_ = nullptr;
 
@@ -90,4 +102,8 @@ private:
     QHash<QString, QPixmap> thumbnailCache_;
     QSet<QString> thumbnailRequestsInFlight_;
     QStringList thumbnailRequestQueue_;
+    QPropertyAnimation* thumbnailStripAnimation_ = nullptr;
+    QTimer* thumbnailAutoHideTimer_ = nullptr;
+    bool thumbnailStripVisible_ = true;
+    bool thumbnailAutoHideEnabled_ = false;
 };

@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
+#include <QTransform>
 
 #include <cstdio>
 #include <cstring>
@@ -39,6 +40,24 @@ DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
         result.errorMessage = reader.errorString();
     }
     return result;
+}
+
+QImage applyRawOrientation(const QImage& image, int flip)
+{
+    if (image.isNull()) {
+        return image;
+    }
+
+    switch (flip) {
+    case 3:
+        return image.transformed(QTransform().rotate(180));
+    case 5:
+        return image.transformed(QTransform().rotate(-90));
+    case 6:
+        return image.transformed(QTransform().rotate(90));
+    default:
+        return image;
+    }
 }
 
 QImage loadScaledWithQtReader(const QString& path, int maxEdge)
@@ -220,6 +239,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     DecodedImage result;
     result.filePath = path;
     result.decoderName = "LibRaw";
+    const int rawFlip = rawProcessor.imgdata.sizes.flip;
 
     libraw_processed_image_t* previewImage = nullptr;
     if (mode == DecodeMode::FastPreview) {
@@ -237,7 +257,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
                 previewImage->data_size,
                 "JPEG");
             if (!preview.isNull()) {
-                result.image = preview.convertToFormat(QImage::Format_RGBA8888);
+                result.image = applyRawOrientation(preview.convertToFormat(QImage::Format_RGBA8888), rawFlip);
                 result.sourceSize = result.image.size();
                 result.isPreview = true;
                 LibRaw::dcraw_clear_mem(previewImage);
@@ -257,7 +277,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
                     previewImage->data + (y * sourceStride),
                     std::min(stride, sourceStride));
             }
-            result.image = preview.convertToFormat(QImage::Format_RGBA8888);
+            result.image = applyRawOrientation(preview.convertToFormat(QImage::Format_RGBA8888), rawFlip);
             result.sourceSize = result.image.size();
             result.isPreview = true;
             LibRaw::dcraw_clear_mem(previewImage);
@@ -298,7 +318,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
                 processedImage->data + (y * sourceStride),
                 std::min(stride, sourceStride));
         }
-        result.image = qimage.convertToFormat(QImage::Format_RGBA8888);
+        result.image = applyRawOrientation(qimage.convertToFormat(QImage::Format_RGBA8888), rawFlip);
         result.sourceSize = result.image.size();
         result.isPreview = false;
     } else if (processedImage->type == LIBRAW_IMAGE_JPEG) {
@@ -307,7 +327,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
             reinterpret_cast<const uchar*>(processedImage->data),
             processedImage->data_size,
             "JPEG");
-        result.image = qimage.convertToFormat(QImage::Format_RGBA8888);
+        result.image = applyRawOrientation(qimage.convertToFormat(QImage::Format_RGBA8888), rawFlip);
         result.sourceSize = result.image.size();
         result.isPreview = false;
     } else {
@@ -392,13 +412,19 @@ QImage ImageDecoder::decodeThumbnail(const QString& path, int maxEdge)
 ImageFormatKind ImageDecoder::detectFormat(const QString& path)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
-    if (suffix == "jpg" || suffix == "jpeg") {
+    if (suffix == "jpg" || suffix == "jpeg" || suffix == "jpe" || suffix == "jfif") {
         return ImageFormatKind::Jpeg;
     }
-    if (suffix == "heif" || suffix == "heic" || suffix == "hif") {
+    if (suffix == "heif" || suffix == "heic" || suffix == "hif" || suffix == "avif" || suffix == "avifs") {
         return ImageFormatKind::Heif;
     }
-    if (suffix == "arw") {
+    static const QSet<QString> rawExtensions = {
+        "3fr", "ari", "arw", "bay", "cap", "cr2", "cr3", "crw", "dcr", "dcs", "dng",
+        "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos",
+        "mrw", "nef", "nrw", "orf", "pef", "ptx", "r3d", "raf", "raw", "rw2", "rwl",
+        "rwz", "sr2", "srf", "srw", "x3f"
+    };
+    if (rawExtensions.contains(suffix)) {
         return ImageFormatKind::Arw;
     }
     return ImageFormatKind::Unknown;
@@ -421,7 +447,16 @@ QString ImageDecoder::decoderName(ImageFormatKind kind)
 
 QStringList ImageDecoder::supportedExtensions()
 {
-    return {"jpg", "jpeg", "heif", "heic", "hif", "arw"};
+    return {
+        "apng", "avif", "avifs", "bmp", "dib", "exr", "gif", "hdr", "heic", "heif", "hif",
+        "ico", "icon", "jfif", "jp2", "jpe", "jpeg", "jpg", "jxl", "jxr", "pbm", "pfm",
+        "pgm", "pic", "png", "pnm", "ppm", "psd", "pxm", "qoi", "ras", "sr", "svg",
+        "tga", "tif", "tiff", "webp", "wp2",
+        "3fr", "ari", "arw", "bay", "cap", "cr2", "cr3", "crw", "dcr", "dcs", "dng",
+        "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos",
+        "mrw", "nef", "nrw", "orf", "pef", "ptx", "r3d", "raf", "raw", "rw2", "rwl",
+        "rwz", "sr2", "srf", "srw", "x3f"
+    };
 }
 
 bool ImageDecoder::supportsFullQuality(ImageFormatKind kind)

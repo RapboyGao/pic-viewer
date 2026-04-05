@@ -120,7 +120,18 @@ bool ImageCatalog::movePrevious()
 
 QStringList ImageCatalog::supportedExtensions()
 {
-    return {"jpg", "jpeg", "heif", "heic", "hif", "arw"};
+    return {
+        // Common raster / container formats handled by Qt image plugins.
+        "apng", "avif", "avifs", "bmp", "dib", "exr", "gif", "hdr", "heic", "heif", "hif",
+        "ico", "icon", "jfif", "jp2", "jpe", "jpeg", "jpg", "jxl", "jxr", "pbm", "pfm",
+        "pgm", "pic", "png", "pnm", "ppm", "psd", "pxm", "qoi", "ras", "sr", "svg",
+        "tga", "tif", "tiff", "webp", "wp2",
+        // RAW families handled by LibRaw.
+        "3fr", "ari", "arw", "bay", "cap", "cr2", "cr3", "crw", "dcr", "dcs", "dng",
+        "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos",
+        "mrw", "nef", "nrw", "orf", "pef", "ptx", "r3d", "raf", "raw", "rw2", "rwl",
+        "rwz", "sr2", "srf", "srw", "x3f"
+    };
 }
 
 bool ImageCatalog::isSupportedFile(const QString& path)

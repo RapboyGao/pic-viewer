@@ -5,7 +5,9 @@
 #include <QPointF>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QTimer>
 
+class QLabel;
 class ImageViewerWidget : public QWidget
 {
     Q_OBJECT
@@ -21,6 +23,9 @@ public:
 
     void setImage(const QImage& image);
     void setMessage(const QString& title, const QString& detail = QString());
+    void setLoading(const QString& title = QString("Loading image..."), const QString& detail = QString());
+    void showTransientZoom(const QString& text);
+    void showTransientImageInfo(const QString& text);
     void clear();
     void zoomIn();
     void zoomOut();
@@ -43,8 +48,15 @@ protected:
 signals:
     void openFileRequested();
     void openFolderRequested();
+    void zoomFactorChanged(double zoomFactor);
 
 private:
+    enum class OverlayState {
+        Empty,
+        Loading,
+        Image,
+    };
+
     void applyZoom(double factor, const QPointF& anchor);
     void clampPanOffset();
     [[nodiscard]] QSize scaledSize() const;
@@ -52,17 +64,29 @@ private:
     [[nodiscard]] QSize baseSize() const;
     [[nodiscard]] bool shouldUseSmoothSampling(const QRectF& target) const;
     void resetViewTransform();
+    void setOverlayState(OverlayState state);
     void updateEmptyStateUi();
+    void updateLoadingStateUi();
+    void updateTransientHudUi();
+    void showTransientHud(const QString& text);
+    void hideTransientHud();
 
     QImage image_;
-    QString title_;
-    QString detail_;
     double zoomFactor_ = 1.0;
     DisplayMode displayMode_ = DisplayMode::FitToWindow;
+    OverlayState overlayState_ = OverlayState::Empty;
     QPointF panOffset_;
     bool dragging_ = false;
     QPoint lastDragPos_;
     QWidget* emptyStateContainer_ = nullptr;
+    QLabel* emptyTitleLabel_ = nullptr;
+    QLabel* emptyDetailLabel_ = nullptr;
     QPushButton* openFileButton_ = nullptr;
     QPushButton* openFolderButton_ = nullptr;
+    QWidget* loadingStateContainer_ = nullptr;
+    QLabel* loadingTitleLabel_ = nullptr;
+    QLabel* loadingDetailLabel_ = nullptr;
+    QWidget* transientHudContainer_ = nullptr;
+    QLabel* transientHudLabel_ = nullptr;
+    QTimer* transientHudTimer_ = nullptr;
 };

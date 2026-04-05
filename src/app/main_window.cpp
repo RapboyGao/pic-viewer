@@ -21,7 +21,6 @@
 #include <QPoint>
 #include <QScrollBar>
 #include <QFrame>
-#include <QStatusBar>
 #include <QPlainTextEdit>
 #include <QFile>
 #include <QTimer>
@@ -91,7 +90,6 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
 
     createMenus();
     createInfoPanel();
-    createStatusBar();
 
     connect(slideshow_, &SlideShowController::advanceRequested, this, &MainWindow::showNextImage);
     connect(slideshow_, &SlideShowController::playingChanged, this, [this](bool playing) {
@@ -101,6 +99,11 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     connect(thumbnailList_, &QListWidget::itemClicked, this, &MainWindow::thumbnailActivated);
     connect(viewer_, &ImageViewerWidget::openFileRequested, this, &MainWindow::openFile);
     connect(viewer_, &ImageViewerWidget::openFolderRequested, this, &MainWindow::openFolder);
+    connect(viewer_, &ImageViewerWidget::zoomFactorChanged, this, [this](double zoomFactor) {
+        if (viewer_ && viewer_->hasImage()) {
+            viewer_->showTransientZoom(QString("Zoom %1%").arg(static_cast<int>(zoomFactor * 100.0)));
+        }
+    });
     connect(thumbnailList_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
         requestVisibleThumbnails();
     });
@@ -118,7 +121,7 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     if (!startupPath.isEmpty()) {
         openPath(startupPath);
     } else {
-        updateStatus();
+        viewer_->setMessage("Open a file or folder", "Supported: common image, HEIF/AVIF, and RAW formats");
     }
 }
 
@@ -127,11 +130,13 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     switch (event->key()) {
     case Qt::Key_Left:
     case Qt::Key_PageUp:
+    case Qt::Key_A:
         setBrowseDirection(PrefetchScheduler::Direction::Backward);
         showPreviousImage();
         return;
     case Qt::Key_Right:
     case Qt::Key_PageDown:
+    case Qt::Key_D:
         setBrowseDirection(PrefetchScheduler::Direction::Forward);
         showNextImage();
         return;
@@ -151,7 +156,6 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         return;
     case Qt::Key_0:
         resetZoom();
-        updateStatus();
         return;
     case Qt::Key_Escape:
         if (isFullScreen()) {
@@ -278,20 +282,6 @@ void MainWindow::createMenus()
     applyThumbnailStripVisibility(false, false);
 }
 
-void MainWindow::createStatusBar()
-{
-    fileStatusLabel_ = new QLabel(this);
-    indexStatusLabel_ = new QLabel(this);
-    metaStatusLabel_ = new QLabel(this);
-    fileStatusLabel_->setStyleSheet("color: #f0f0f0;");
-    indexStatusLabel_->setStyleSheet("color: #f0f0f0;");
-
-    statusBar()->addWidget(fileStatusLabel_, 1);
-    statusBar()->addPermanentWidget(indexStatusLabel_);
-    metaStatusLabel_->hide();
-    statusBar()->setStyleSheet("background: #000000; color: #f0f0f0;");
-}
-
 void MainWindow::createInfoPanel()
 {
     infoDock_ = new QDockWidget("Image Info", this);
@@ -325,6 +315,7 @@ void MainWindow::openPath(const QString& path)
     if (!catalog_.loadFromPath(path)) {
         viewer_->setMessage("No supported images found", QFileInfo(path).absoluteFilePath());
         currentPath_.clear();
+        displayedPath_.clear();
         cache_.clear();
         thumbnailCache_.clear();
         thumbnailRequestsInFlight_.clear();
@@ -336,7 +327,6 @@ void MainWindow::openPath(const QString& path)
         imagePrefetchRequestsInFlight_.clear();
         imagePrefetchRequestQueue_.clear();
         updateInfoPanel();
-        updateStatus();
         return;
     }
 
@@ -359,16 +349,17 @@ void MainWindow::refreshCurrentImage()
     currentPath_ = catalog_.currentPath();
     if (currentPath_.isEmpty()) {
         viewer_->setMessage("No image selected");
+        displayedPath_.clear();
         updateInfoPanel();
-        updateStatus();
         return;
     }
 
-    if (!viewer_->hasImage()) {
-        viewer_->setMessage("Loading image...", QFileInfo(currentPath_).fileName());
+    const bool hasImmediateImage = cache_.contains(currentPath_, DecodeMode::FastPreview)
+        || cache_.contains(currentPath_, DecodeMode::FullQuality);
+    if (!hasImmediateImage && displayedPath_ != currentPath_) {
+        viewer_->setLoading("Loading image...", QFileInfo(currentPath_).fileName());
     }
     updateThumbnailSelection();
-    updateStatus();
 
     requestImage(currentPath_, DecodeMode::FastPreview, true);
     queuePrefetchForCurrentContext();
@@ -454,17 +445,27 @@ void MainWindow::handleDecodedImage(const QString& path, DecodeMode mode, qint64
 void MainWindow::displayDecodedImage(const DecodedImage& image)
 {
     if (image.isValid()) {
+        const bool changedPath = displayedPath_ != image.filePath;
         viewer_->setImage(image.image);
+        displayedPath_ = image.filePath;
         updateThumbnailForPath(image.filePath, image.image);
         preloadThumbnailNeighbors();
         requestVisibleThumbnails();
+        if (changedPath) {
+            const int index = std::max(0, catalog_.currentIndex());
+            const int total = catalog_.size();
+            viewer_->showTransientImageInfo(QString("%1  %2 / %3")
+                .arg(QFileInfo(image.filePath).fileName())
+                .arg(total > 0 ? index + 1 : 0)
+                .arg(total));
+        }
     } else {
         if (!viewer_->hasImage()) {
             viewer_->setMessage("Failed to decode image", image.errorMessage);
+            displayedPath_.clear();
         }
     }
     updateInfoPanel(&image);
-    updateStatus(&image);
 }
 
 void MainWindow::toggleFullscreen()
@@ -479,40 +480,34 @@ void MainWindow::toggleFullscreen()
 void MainWindow::zoomIn()
 {
     viewer_->zoomIn();
-    updateStatus();
 }
 
 void MainWindow::zoomOut()
 {
     viewer_->zoomOut();
-    updateStatus();
 }
 
 void MainWindow::resetZoom()
 {
     viewer_->resetZoom();
-    updateStatus();
 }
 
 void MainWindow::setFitToWindowMode()
 {
     viewer_->setDisplayMode(ImageViewerWidget::DisplayMode::FitToWindow);
     setDisplayModeChecked(viewer_->displayMode());
-    updateStatus();
 }
 
 void MainWindow::setActualSizeMode()
 {
     viewer_->setDisplayMode(ImageViewerWidget::DisplayMode::ActualSize);
     setDisplayModeChecked(viewer_->displayMode());
-    updateStatus();
 }
 
 void MainWindow::setFillWindowMode()
 {
     viewer_->setDisplayMode(ImageViewerWidget::DisplayMode::FillWindow);
     setDisplayModeChecked(viewer_->displayMode());
-    updateStatus();
 }
 
 void MainWindow::thumbnailActivated(QListWidgetItem* item)
@@ -528,53 +523,11 @@ void MainWindow::thumbnailActivated(QListWidgetItem* item)
 }
 
 
-void MainWindow::updateStatus(const DecodedImage* decoded)
-{
-    if (currentPath_.isEmpty()) {
-        fileStatusLabel_->setText("No file");
-        indexStatusLabel_->setText("0 / 0");
-        statusBar()->hide();
-        return;
-    }
-
-    statusBar()->show();
-    fileStatusLabel_->setText(QFileInfo(currentPath_).fileName());
-    indexStatusLabel_->setText(QString("%1 / %2").arg(catalog_.currentIndex() + 1).arg(catalog_.size()));
-
-    QStringList parts;
-    if (decoded && decoded->isValid()) {
-        parts << [this]() {
-            switch (viewer_->displayMode()) {
-            case ImageViewerWidget::DisplayMode::ActualSize:
-                return QString("Actual");
-            case ImageViewerWidget::DisplayMode::FillWindow:
-                return QString("Fill");
-            case ImageViewerWidget::DisplayMode::FitToWindow:
-            default:
-                return QString("Fit");
-            }
-        }();
-        parts << QString("Zoom %1%").arg(static_cast<int>(viewer_->zoomFactor() * 100.0));
-    }
-    if (decoded && !decoded->errorMessage.isEmpty()) {
-        parts << "Error";
-    }
-    statusBar()->showMessage(parts.join(" | "));
-}
-
 void MainWindow::setIntervalActionChecked(int intervalMs)
 {
     for (QAction* action : intervalActionGroup_->actions()) {
         action->setChecked(action->data().toInt() == intervalMs);
     }
-}
-
-QString MainWindow::currentDisplayModeLabel(const DecodedImage* decoded) const
-{
-    if (!decoded) {
-        return "Unknown";
-    }
-    return decoded->isPreview ? "Fast Preview" : "Full Quality";
 }
 
 void MainWindow::createThumbnailStrip()

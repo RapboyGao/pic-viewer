@@ -7,7 +7,6 @@
 #include "viewer/image_viewer_widget.h"
 
 #include <QFutureWatcher>
-#include <QLabel>
 #include <QListWidget>
 #include <QMainWindow>
 #include <QPlainTextEdit>
@@ -57,7 +56,6 @@ private slots:
 
 private:
     void createMenus();
-    void createStatusBar();
     void createInfoPanel();
     void createThumbnailStrip();
     void applyThumbnailStripVisibility(bool visible, bool animated);
@@ -77,11 +75,9 @@ private:
     void requestVisibleThumbnails();
     void processPendingThumbnailRequests();
     void processPendingImagePrefetchRequests();
-    void updateStatus(const DecodedImage* decoded = nullptr);
     void updateInfoPanel(const DecodedImage* decoded = nullptr);
     void setIntervalActionChecked(int intervalMs);
     void setDisplayModeChecked(ImageViewerWidget::DisplayMode mode);
-    [[nodiscard]] QString currentDisplayModeLabel(const DecodedImage* decoded) const;
     [[nodiscard]] QString thumbnailKey(const QString& path) const;
     void enqueueThumbnailRequest(const QString& path, int priority);
     void enqueueImagePrefetchRequests(const QList<PrefetchScheduler::Request>& requests);
@@ -110,10 +106,6 @@ private:
     QThreadPool imageDecodePool_;
     QThreadPool thumbnailDecodePool_;
 
-    QLabel* fileStatusLabel_ = nullptr;
-    QLabel* indexStatusLabel_ = nullptr;
-    QLabel* metaStatusLabel_ = nullptr;
-
     QAction* playPauseAction_ = nullptr;
     QAction* fullscreenAction_ = nullptr;
     QAction* infoPanelAction_ = nullptr;
@@ -124,6 +116,7 @@ private:
 
     qint64 displaySequence_ = 0;
     QString currentPath_;
+    QString displayedPath_;
     QHash<QString, QPixmap> thumbnailCache_;
     QSet<QString> thumbnailRequestsInFlight_;
     QList<ThumbnailJob> thumbnailRequestQueue_;

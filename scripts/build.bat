@@ -27,18 +27,8 @@ if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 mkdir "%BUILD_WORK_DIR%"
 
 rem Stop any running copies so the linker can overwrite the executables.
-taskkill /IM pic-viewer.exe /F >nul 2>nul
-taskkill /IM test_image_catalog.exe /F >nul 2>nul
-taskkill /IM test_slide_show_controller.exe /F >nul 2>nul
-taskkill /IM test_prefetch_scheduler.exe /F >nul 2>nul
-taskkill /IM test_image_decoder.exe /F >nul 2>nul
-
-for /L %%I in (1,1,10) do (
-  powershell -NoProfile -Command "if (Get-Process pic-viewer,test_image_catalog,test_slide_show_controller,test_prefetch_scheduler,test_image_decoder -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"
-  if not errorlevel 1 goto :processes_cleared
-  timeout /t 1 /nobreak >nul
-)
-:processes_cleared
+powershell -NoProfile -Command "$names = 'pic-viewer','test_image_catalog','test_slide_show_controller','test_prefetch_scheduler','test_image_decoder'; Get-CimInstance Win32_Process | Where-Object { $names -contains $_.Name -or ($_.ExecutablePath -and $_.ExecutablePath -like '*\pic-viewer\build\*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+timeout /t 2 /nobreak >nul
 
 for %%F in (
   "%BUILD_DIR%\Debug\pic-viewer.exe"
@@ -80,7 +70,11 @@ cmake -S "%ROOT_DIR%" -B "%BUILD_WORK_DIR%" -DCMAKE_TOOLCHAIN_FILE="%VCPKG_TOOLC
 if errorlevel 1 exit /b 1
 
 echo ==> Building
-cmake --build "%BUILD_WORK_DIR%" --config "%BUILD_CONFIG%" -- /m:1
+if "%RUN_TESTS%"=="1" (
+  cmake --build "%BUILD_WORK_DIR%" --config "%BUILD_CONFIG%" -- /m:1
+) else (
+  cmake --build "%BUILD_WORK_DIR%" --config "%BUILD_CONFIG%" --target pic-viewer -- /m:1
+)
 if errorlevel 1 exit /b 1
 
 if "%RUN_TESTS%"=="1" (

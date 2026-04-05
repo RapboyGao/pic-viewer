@@ -6,9 +6,40 @@ vcpkg_installed/
 aqtinstall.log
 Configuring
 App
+Building
+*.log
+*.tmp
+*.tmp*
+*.pdb
+*.idb
+*.ilk
+*.obj
+*.tlog
+*.lastbuildstate
+*.unsuccessfulbuild
+*.VC.db
+*.VC.VC.opendb
+*.cache
+*.exp
+*.lib
+*.manifest
+*.res
+*.sdf
+*.ipdb
+*.iobj
+*.exe.recipe
+*.appx
+*.appxsym
+*.deploy
 
 # OS / editor / user-specific files
 .DS_Store
 # .vscode/
 *.user
 *.autosave
+
+# Project-local generated markers
+Running
+
+/Building
+/App

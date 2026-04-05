@@ -9,6 +9,7 @@ set "VCPKG_DEFAULT_PREFIX=%ROOT_DIR%\vcpkg_installed\x64-windows"
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%RUN_TESTS%"=="" set "RUN_TESTS=1"
+if "%BUILD_CONFIG%"=="" set "BUILD_CONFIG=Debug"
 
 if "%QT_PREFIX%"=="" (
   if not "%Qt6_DIR%"=="" (
@@ -47,19 +48,30 @@ cmake -S "%ROOT_DIR%" -B "%BUILD_DIR%" -DCMAKE_TOOLCHAIN_FILE="%VCPKG_TOOLCHAIN%
 if errorlevel 1 exit /b 1
 
 echo ==> Building
-cmake --build "%BUILD_DIR%" --parallel
+cmake --build "%BUILD_DIR%" --config "%BUILD_CONFIG%" --parallel
 if errorlevel 1 exit /b 1
+
+set "APP_DIR=%BUILD_DIR%\%BUILD_CONFIG%"
+if exist "%APP_DIR%" (
+  set "WINDEPLOYQT=%VCPKG_ROOT%\installed\x64-windows\tools\Qt6\bin\windeployqt.exe"
+  set "APP_EXE=%APP_DIR%\pic-viewer.exe"
+  if exist "%WINDEPLOYQT%" if exist "%APP_EXE%" (
+    if /I "%BUILD_CONFIG%"=="Debug" (
+      "%WINDEPLOYQT%" --debug --compiler-runtime --dir "%APP_DIR%" "%APP_EXE%"
+    ) else (
+      "%WINDEPLOYQT%" --release --compiler-runtime --dir "%APP_DIR%" "%APP_EXE%"
+    )
+  )
+)
 
 if "%RUN_TESTS%"=="1" (
   echo ==> Running tests
-  ctest --test-dir "%BUILD_DIR%" -C Debug --output-on-failure
+  ctest --test-dir "%BUILD_DIR%" -C "%BUILD_CONFIG%" --output-on-failure
   if errorlevel 1 exit /b 1
 )
 
-if exist "%BUILD_DIR%\Debug\pic-viewer.exe" (
-  echo ==> Build complete: %BUILD_DIR%\Debug\pic-viewer.exe
-) else if exist "%BUILD_DIR%\Release\pic-viewer.exe" (
-  echo ==> Build complete: %BUILD_DIR%\Release\pic-viewer.exe
+if exist "%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe" (
+  echo ==> Build complete: %BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe
 ) else (
   echo ==> Build complete
 )

@@ -197,10 +197,10 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $vcpkgRoot = Ensure-Vcpkg
 Prepend-UserPath -PathEntry $vcpkgRoot
 
-$installedRoot = Join-Path $vcpkgRoot "installed\$VcpkgTriplet"
+$installedRoot = Join-Path $repoRoot 'vcpkg_installed'
 $vcpkgExe = Join-Path $vcpkgRoot 'vcpkg.exe'
 $vsInstallPath = Ensure-VisualStudioBuildTools
-$installArgs = @('install', '--triplet', $VcpkgTriplet, '--vcpkg-root', $vcpkgRoot)
+$installArgs = @('install', '--triplet', $VcpkgTriplet, '--vcpkg-root', $vcpkgRoot, '--x-manifest-root', $repoRoot, '--x-install-root', $installedRoot)
 if ($vsInstallPath) {
     $vsDevCmd = Join-Path $vsInstallPath 'Common7\Tools\VsDevCmd.bat'
     if (Test-Path $vsDevCmd) {

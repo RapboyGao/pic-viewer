@@ -5,6 +5,7 @@ set "ROOT_DIR=%~dp0.."
 for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
 set "VCPKG_TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
+set "VCPKG_DEFAULT_PREFIX=%ROOT_DIR%\vcpkg_installed\x64-windows"
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%RUN_TESTS%"=="" set "RUN_TESTS=1"
@@ -23,7 +24,22 @@ if not exist "%VCPKG_TOOLCHAIN%" (
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 
 if "%QT_PREFIX%"=="" (
-  if exist "%VCPKG_ROOT%\installed\x64-windows" set "QT_PREFIX=%VCPKG_ROOT%\installed\x64-windows"
+  if exist "%VCPKG_DEFAULT_PREFIX%" set "QT_PREFIX=%VCPKG_DEFAULT_PREFIX%"
+)
+
+if not exist "%QT_PREFIX%\share\Qt6\Qt6Config.cmake" if not exist "%QT_PREFIX%\share\qt6\Qt6Config.cmake" (
+  if exist "%VCPKG_DEFAULT_PREFIX%" set "QT_PREFIX=%VCPKG_DEFAULT_PREFIX%"
+)
+
+if exist "%QT_PREFIX%\x64-windows\share\Qt6\Qt6Config.cmake" (
+  set "QT_PREFIX=%QT_PREFIX%\x64-windows"
+) else if exist "%QT_PREFIX%\x64-windows\share\qt6\Qt6Config.cmake" (
+  set "QT_PREFIX=%QT_PREFIX%\x64-windows"
+)
+
+if not exist "%QT_PREFIX%\share\Qt6\Qt6Config.cmake" if not exist "%QT_PREFIX%\share\qt6\Qt6Config.cmake" (
+  echo error: Qt6Config.cmake not found under "%QT_PREFIX%".
+  exit /b 1
 )
 
 echo ==> Configuring with vcpkg toolchain: %VCPKG_TOOLCHAIN%
@@ -36,8 +52,14 @@ if errorlevel 1 exit /b 1
 
 if "%RUN_TESTS%"=="1" (
   echo ==> Running tests
-  ctest --test-dir "%BUILD_DIR%" --output-on-failure
+  ctest --test-dir "%BUILD_DIR%" -C Debug --output-on-failure
   if errorlevel 1 exit /b 1
 )
 
-echo ==> Build complete: %BUILD_DIR%\pic-viewer.exe
+if exist "%BUILD_DIR%\Debug\pic-viewer.exe" (
+  echo ==> Build complete: %BUILD_DIR%\Debug\pic-viewer.exe
+) else if exist "%BUILD_DIR%\Release\pic-viewer.exe" (
+  echo ==> Build complete: %BUILD_DIR%\Release\pic-viewer.exe
+) else (
+  echo ==> Build complete
+)

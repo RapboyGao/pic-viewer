@@ -27,7 +27,11 @@ if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 mkdir "%BUILD_WORK_DIR%"
 
 rem Stop any running copies so the linker can overwrite the executables.
-powershell -NoProfile -Command "$names = 'pic-viewer','test_image_catalog','test_slide_show_controller','test_prefetch_scheduler','test_image_decoder'; Get-CimInstance Win32_Process | Where-Object { $names -contains $_.Name -or ($_.ExecutablePath -and $_.ExecutablePath -like '*\pic-viewer\build\*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+taskkill /IM pic-viewer.exe /F /T >nul 2>nul
+taskkill /IM test_image_catalog.exe /F /T >nul 2>nul
+taskkill /IM test_slide_show_controller.exe /F /T >nul 2>nul
+taskkill /IM test_prefetch_scheduler.exe /F /T >nul 2>nul
+taskkill /IM test_image_decoder.exe /F /T >nul 2>nul
 timeout /t 2 /nobreak >nul
 
 for %%F in (

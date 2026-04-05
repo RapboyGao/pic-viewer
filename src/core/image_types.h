@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QSize>
 #include <QString>
+#include <QStringList>
 
 enum class DecodeMode {
     FastPreview,
@@ -22,6 +23,7 @@ struct DecodedImage {
     QSize sourceSize;
     QString decoderName;
     QString errorMessage;
+    QStringList metadataLines;
     bool isPreview = false;
 
     [[nodiscard]] bool isValid() const

@@ -41,6 +41,7 @@ set(PIC_VIEWER_SOURCES
     src/app/main_window.cpp
     src/catalog/image_catalog.cpp
     src/core/image_cache.cpp
+    src/core/prefetch_scheduler.cpp
     src/core/slide_show_controller.cpp
     src/decoder/image_decoder.cpp
     src/viewer/image_viewer_widget.cpp
@@ -51,6 +52,7 @@ set(PIC_VIEWER_HEADERS
     src/catalog/image_catalog.h
     src/core/image_cache.h
     src/core/image_types.h
+    src/core/prefetch_scheduler.h
     src/core/slide_show_controller.h
     src/decoder/image_decoder.h
     src/viewer/image_viewer_widget.h
@@ -83,6 +85,11 @@ qt_add_executable(test_slide_show_controller
     src/core/slide_show_controller.cpp
 )
 
+qt_add_executable(test_prefetch_scheduler
+    tests/test_prefetch_scheduler.cpp
+    src/core/prefetch_scheduler.cpp
+)
+
 qt_add_executable(test_image_decoder
     tests/test_image_decoder.cpp
     src/decoder/image_decoder.cpp
@@ -100,6 +107,12 @@ target_link_libraries(test_slide_show_controller
         Qt6::Widgets
 )
 
+target_link_libraries(test_prefetch_scheduler
+    PRIVATE
+        Qt6::Test
+        Qt6::Widgets
+)
+
 target_link_libraries(test_image_decoder
     PRIVATE
         Qt6::Test
@@ -111,6 +124,7 @@ target_link_libraries(test_image_decoder
 
 target_include_directories(test_image_catalog PRIVATE src)
 target_include_directories(test_slide_show_controller PRIVATE src)
+target_include_directories(test_prefetch_scheduler PRIVATE src)
 target_include_directories(test_image_decoder PRIVATE src)
 
 install(TARGETS pic-viewer
@@ -122,4 +136,5 @@ qt_finalize_executable(pic-viewer)
 
 add_test(NAME test_image_catalog COMMAND test_image_catalog)
 add_test(NAME test_slide_show_controller COMMAND test_slide_show_controller)
+add_test(NAME test_prefetch_scheduler COMMAND test_prefetch_scheduler)
 add_test(NAME test_image_decoder COMMAND test_image_decoder)

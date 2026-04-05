@@ -2,8 +2,10 @@
 
 #include <algorithm>
 
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QShowEvent>
 #include <QWheelEvent>
 
 ImageViewerWidget::ImageViewerWidget(QWidget* parent)
@@ -12,6 +14,43 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     setMinimumSize(320, 240);
     setAutoFillBackground(true);
     setMouseTracking(true);
+    setStyleSheet("background-color: black;");
+
+    emptyStateContainer_ = new QWidget(this);
+    emptyStateContainer_->setStyleSheet("background: transparent;");
+    auto* layout = new QVBoxLayout(emptyStateContainer_);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(12);
+    layout->setAlignment(Qt::AlignCenter);
+
+    auto* titleLabel = new QLabel("Open a file or folder", emptyStateContainer_);
+    QFont titleFont = titleLabel->font();
+    titleFont.setPointSize(titleFont.pointSize() + 4);
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->setAlignment(Qt::AlignCenter);
+    titleLabel->setStyleSheet("color: #f2f2f2;");
+    layout->addWidget(titleLabel, 0, Qt::AlignHCenter);
+
+    auto* detailLabel = new QLabel("Supported: common image, HEIF/AVIF, and RAW formats", emptyStateContainer_);
+    detailLabel->setAlignment(Qt::AlignCenter);
+    detailLabel->setStyleSheet("color: #d0d0d0;");
+    layout->addWidget(detailLabel, 0, Qt::AlignHCenter);
+
+    openFileButton_ = new QPushButton("Open File...", emptyStateContainer_);
+    openFolderButton_ = new QPushButton("Open Folder...", emptyStateContainer_);
+    openFileButton_->setMinimumWidth(180);
+    openFolderButton_->setMinimumWidth(180);
+    openFileButton_->setStyleSheet(
+        "QPushButton { color: white; background: #2d2d2d; border: 1px solid #555; border-radius: 8px; padding: 8px 14px; }"
+        "QPushButton:hover { background: #3a3a3a; }"
+        "QPushButton:pressed { background: #1f1f1f; }");
+    openFolderButton_->setStyleSheet(openFileButton_->styleSheet());
+    layout->addWidget(openFileButton_, 0, Qt::AlignHCenter);
+    layout->addWidget(openFolderButton_, 0, Qt::AlignHCenter);
+    connect(openFileButton_, &QPushButton::clicked, this, &ImageViewerWidget::openFileRequested);
+    connect(openFolderButton_, &QPushButton::clicked, this, &ImageViewerWidget::openFolderRequested);
+
     setMessage("Open a file or folder", "Supported: JPG, JPEG, HEIF, HEIC, HIF, ARW");
 }
 
@@ -21,6 +60,7 @@ void ImageViewerWidget::setImage(const QImage& image)
     title_.clear();
     detail_.clear();
     resetViewTransform();
+    updateEmptyStateUi();
     update();
 }
 
@@ -30,6 +70,7 @@ void ImageViewerWidget::setMessage(const QString& title, const QString& detail)
     title_ = title;
     detail_ = detail;
     resetViewTransform();
+    updateEmptyStateUi();
     update();
 }
 
@@ -76,12 +117,17 @@ ImageViewerWidget::DisplayMode ImageViewerWidget::displayMode() const
     return displayMode_;
 }
 
+bool ImageViewerWidget::hasImage() const
+{
+    return !image_.isNull();
+}
+
 void ImageViewerWidget::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
 
     QPainter painter(this);
-    painter.fillRect(rect(), palette().window());
+    painter.fillRect(rect(), QColor(0, 0, 0));
 
     if (!image_.isNull()) {
         const QRectF target = targetRect();
@@ -90,22 +136,7 @@ void ImageViewerWidget::paintEvent(QPaintEvent* event)
         return;
     }
 
-    painter.setRenderHint(QPainter::TextAntialiasing, true);
-    painter.setPen(palette().text().color());
-
-    QFont titleFont = painter.font();
-    titleFont.setPointSize(titleFont.pointSize() + 4);
-    titleFont.setBold(true);
-    painter.setFont(titleFont);
-    painter.drawText(rect().adjusted(24, 0, -24, -16), Qt::AlignCenter | Qt::TextWordWrap, title_);
-
-    if (!detail_.isEmpty()) {
-        QFont detailFont = painter.font();
-        detailFont.setBold(false);
-        detailFont.setPointSize(std::max(detailFont.pointSize() - 2, 10));
-        painter.setFont(detailFont);
-        painter.drawText(rect().adjusted(40, 80, -40, 0), Qt::AlignCenter | Qt::TextWordWrap, detail_);
-    }
+    // Empty-state text and actions are provided by child widgets.
 }
 
 void ImageViewerWidget::wheelEvent(QWheelEvent* event)
@@ -173,6 +204,7 @@ void ImageViewerWidget::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
     clampPanOffset();
+    updateEmptyStateUi();
 }
 
 void ImageViewerWidget::applyZoom(double factor, const QPointF& anchor)
@@ -277,4 +309,29 @@ void ImageViewerWidget::resetViewTransform()
 {
     zoomFactor_ = 1.0;
     panOffset_ = {};
+}
+
+void ImageViewerWidget::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    updateEmptyStateUi();
+}
+
+void ImageViewerWidget::updateEmptyStateUi()
+{
+    if (!emptyStateContainer_) {
+        return;
+    }
+
+    const bool visible = image_.isNull();
+    emptyStateContainer_->setVisible(visible);
+    if (visible) {
+        const QSize panelSize(420, 180);
+        emptyStateContainer_->setGeometry(
+            (width() - panelSize.width()) / 2,
+            (height() - panelSize.height()) / 2 - 24,
+            panelSize.width(),
+            panelSize.height());
+        emptyStateContainer_->raise();
+    }
 }

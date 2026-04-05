@@ -17,20 +17,29 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
+#include <QDockWidget>
+#include <QPoint>
 #include <QScrollBar>
+#include <QFrame>
 #include <QStatusBar>
+#include <QPlainTextEdit>
+#include <QFile>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QThread>
 #include <QtConcurrent>
+#include <algorithm>
 
 namespace {
 
 constexpr int kDefaultIntervalMs = 3000;
 constexpr int kThumbnailSize = 96;
 constexpr int kMaxThumbnailInflight = 2;
+constexpr int kMaxImagePrefetchInflight = 3;
 constexpr int kDecodeThreadStackSize = 8 * 1024 * 1024;
 constexpr int kThumbnailStripExpandedHeight = kThumbnailSize + 48;
 constexpr int kThumbnailRevealMargin = 96;
+constexpr int kImagePrefetchWindow = 6;
 
 QString modeLabelForAction(int intervalMs)
 {
@@ -47,7 +56,7 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     setWindowIcon(QIcon(":/icons/app_icon.xpm"));
     resize(1200, 800);
 
-    imageDecodePool_.setMaxThreadCount(2);
+    imageDecodePool_.setMaxThreadCount(std::max(2, QThread::idealThreadCount() / 2));
     imageDecodePool_.setStackSize(kDecodeThreadStackSize);
 
     thumbnailDecodePool_.setMaxThreadCount(kMaxThumbnailInflight);
@@ -57,8 +66,10 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     auto* layout = new QVBoxLayout(central);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
+    central->setStyleSheet("background-color: black;");
 
     viewer_ = new ImageViewerWidget(central);
+    viewer_->setStyleSheet("background-color: black;");
     layout->addWidget(viewer_, 1);
     createThumbnailStrip();
     layout->addWidget(thumbnailStripContainer_);
@@ -75,8 +86,11 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     thumbnailAutoHideTimer_ = new QTimer(this);
     thumbnailAutoHideTimer_->setSingleShot(true);
     thumbnailAutoHideTimer_->setInterval(1200);
+    thumbnailAutoHideEnabled_ = true;
+    thumbnailStripContainer_->hide();
 
     createMenus();
+    createInfoPanel();
     createStatusBar();
 
     connect(slideshow_, &SlideShowController::advanceRequested, this, &MainWindow::showNextImage);
@@ -85,6 +99,8 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     });
     connect(thumbnailList_, &QListWidget::itemActivated, this, &MainWindow::thumbnailActivated);
     connect(thumbnailList_, &QListWidget::itemClicked, this, &MainWindow::thumbnailActivated);
+    connect(viewer_, &ImageViewerWidget::openFileRequested, this, &MainWindow::openFile);
+    connect(viewer_, &ImageViewerWidget::openFolderRequested, this, &MainWindow::openFolder);
     connect(thumbnailList_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
         requestVisibleThumbnails();
     });
@@ -111,10 +127,12 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
     switch (event->key()) {
     case Qt::Key_Left:
     case Qt::Key_PageUp:
+        setBrowseDirection(PrefetchScheduler::Direction::Backward);
         showPreviousImage();
         return;
     case Qt::Key_Right:
     case Qt::Key_PageDown:
+        setBrowseDirection(PrefetchScheduler::Direction::Forward);
         showNextImage();
         return;
     case Qt::Key_Space:
@@ -143,6 +161,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
         break;
     case Qt::Key_T:
         toggleThumbnailStrip();
+        return;
+    case Qt::Key_I:
+        toggleInfoPanel();
         return;
     default:
         break;
@@ -175,6 +196,7 @@ void MainWindow::showNextImage()
     if (!catalog_.moveNext()) {
         return;
     }
+    setBrowseDirection(PrefetchScheduler::Direction::Forward);
     refreshCurrentImage();
 }
 
@@ -183,6 +205,7 @@ void MainWindow::showPreviousImage()
     if (!catalog_.movePrevious()) {
         return;
     }
+    setBrowseDirection(PrefetchScheduler::Direction::Backward);
     refreshCurrentImage();
 }
 
@@ -220,6 +243,8 @@ void MainWindow::createMenus()
 
     QMenu* viewMenu = menuBar()->addMenu("&View");
     fullscreenAction_ = viewMenu->addAction("Toggle Fullscreen", Qt::Key_F11, this, &MainWindow::toggleFullscreen);
+    infoPanelAction_ = viewMenu->addAction("Toggle Info Panel", Qt::Key_I, this, &MainWindow::toggleInfoPanel);
+    infoPanelAction_->setCheckable(true);
     viewMenu->addAction("Zoom In", QKeySequence::ZoomIn, this, &MainWindow::zoomIn);
     viewMenu->addAction("Zoom Out", QKeySequence::ZoomOut, this, &MainWindow::zoomOut);
     viewMenu->addAction("Reset Zoom", QKeySequence(Qt::CTRL | Qt::Key_0), this, &MainWindow::resetZoom);
@@ -250,6 +275,7 @@ void MainWindow::createMenus()
     thumbnailAutoHideAction_ = viewMenu->addAction("Auto-hide Thumbnail Strip", this, &MainWindow::toggleAutoHideThumbnailStrip);
     thumbnailAutoHideAction_->setCheckable(true);
     updateThumbnailActions();
+    applyThumbnailStripVisibility(false, false);
 }
 
 void MainWindow::createStatusBar()
@@ -257,10 +283,41 @@ void MainWindow::createStatusBar()
     fileStatusLabel_ = new QLabel(this);
     indexStatusLabel_ = new QLabel(this);
     metaStatusLabel_ = new QLabel(this);
+    fileStatusLabel_->setStyleSheet("color: #f0f0f0;");
+    indexStatusLabel_->setStyleSheet("color: #f0f0f0;");
 
     statusBar()->addWidget(fileStatusLabel_, 1);
     statusBar()->addPermanentWidget(indexStatusLabel_);
-    statusBar()->addPermanentWidget(metaStatusLabel_);
+    metaStatusLabel_->hide();
+    statusBar()->setStyleSheet("background: #000000; color: #f0f0f0;");
+}
+
+void MainWindow::createInfoPanel()
+{
+    infoDock_ = new QDockWidget("Image Info", this);
+    infoDock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    infoDock_->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
+    infoDock_->setMinimumWidth(280);
+    infoDock_->setVisible(false);
+
+    infoText_ = new QPlainTextEdit(infoDock_);
+    infoText_->setReadOnly(true);
+    infoText_->setFrameShape(QFrame::NoFrame);
+    infoText_->setStyleSheet(R"(
+        QPlainTextEdit {
+            background: #101010;
+            color: #f0f0f0;
+            border: none;
+            selection-background-color: #2a82da;
+        }
+    )");
+    infoDock_->setWidget(infoText_);
+    addDockWidget(Qt::LeftDockWidgetArea, infoDock_);
+    connect(infoDock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+        if (infoPanelAction_) {
+            infoPanelAction_->setChecked(visible);
+        }
+    });
 }
 
 void MainWindow::openPath(const QString& path)
@@ -273,6 +330,12 @@ void MainWindow::openPath(const QString& path)
         thumbnailRequestsInFlight_.clear();
         thumbnailRequestQueue_.clear();
         rebuildThumbnailStrip();
+        thumbnailStripContainer_->hide();
+        thumbnailStripVisible_ = false;
+        updateThumbnailActions();
+        imagePrefetchRequestsInFlight_.clear();
+        imagePrefetchRequestQueue_.clear();
+        updateInfoPanel();
         updateStatus();
         return;
     }
@@ -281,7 +344,13 @@ void MainWindow::openPath(const QString& path)
     thumbnailCache_.clear();
     thumbnailRequestsInFlight_.clear();
     thumbnailRequestQueue_.clear();
+    imagePrefetchRequestsInFlight_.clear();
+    imagePrefetchRequestQueue_.clear();
     rebuildThumbnailStrip();
+    const bool hasImages = !catalog_.isEmpty();
+    thumbnailStripContainer_->setVisible(hasImages);
+    thumbnailStripVisible_ = hasImages;
+    updateThumbnailActions();
     refreshCurrentImage();
 }
 
@@ -290,16 +359,19 @@ void MainWindow::refreshCurrentImage()
     currentPath_ = catalog_.currentPath();
     if (currentPath_.isEmpty()) {
         viewer_->setMessage("No image selected");
+        updateInfoPanel();
         updateStatus();
         return;
     }
 
-    viewer_->setMessage("Loading image...", QFileInfo(currentPath_).fileName());
+    if (!viewer_->hasImage()) {
+        viewer_->setMessage("Loading image...", QFileInfo(currentPath_).fileName());
+    }
     updateThumbnailSelection();
     updateStatus();
 
     requestImage(currentPath_, DecodeMode::FastPreview, true);
-    preloadNeighbors();
+    queuePrefetchForCurrentContext();
 }
 
 void MainWindow::requestImage(const QString& path, DecodeMode mode, bool displayWhenReady)
@@ -333,23 +405,34 @@ void MainWindow::requestImage(const QString& path, DecodeMode mode, bool display
     }));
 }
 
-void MainWindow::preloadNeighbors()
+void MainWindow::queuePrefetchForCurrentContext()
 {
     const QStringList paths = catalog_.paths();
-    if (paths.size() <= 1 || currentPath_.isEmpty()) {
+    if (paths.isEmpty() || currentPath_.isEmpty()) {
         return;
     }
 
-    const int index = catalog_.currentIndex();
-    const int previousIndex = (index - 1 + paths.size()) % paths.size();
-    const int nextIndex = (index + 1) % paths.size();
-    const int nextNextIndex = (index + 2) % paths.size();
-
-    for (const QString& neighbor : {paths.at(previousIndex), paths.at(nextIndex), paths.at(nextNextIndex)}) {
-        if (!cache_.contains(neighbor, DecodeMode::FastPreview)) {
-            requestImage(neighbor, DecodeMode::FastPreview, false);
+    const QList<PrefetchScheduler::Request> requests = prefetchScheduler_.planImageRequests(
+        paths,
+        catalog_.currentIndex(),
+        browseDirection_,
+        kImagePrefetchWindow);
+    QList<PrefetchScheduler::Request> filtered;
+    filtered.reserve(requests.size());
+    for (const auto& request : requests) {
+        if (request.path != currentPath_) {
+            filtered.push_back(request);
         }
     }
+    enqueueImagePrefetchRequests(filtered);
+}
+
+void MainWindow::enqueueImagePrefetchRequests(const QList<PrefetchScheduler::Request>& requests)
+{
+    for (const auto& request : requests) {
+        enqueueImagePrefetchRequest(request.path, request.mode, request.priority);
+    }
+    processPendingImagePrefetchRequests();
 }
 
 void MainWindow::handleDecodedImage(const QString& path, DecodeMode mode, qint64 sequence, const DecodedImage& image)
@@ -376,8 +459,11 @@ void MainWindow::displayDecodedImage(const DecodedImage& image)
         preloadThumbnailNeighbors();
         requestVisibleThumbnails();
     } else {
-        viewer_->setMessage("Failed to decode image", image.errorMessage);
+        if (!viewer_->hasImage()) {
+            viewer_->setMessage("Failed to decode image", image.errorMessage);
+        }
     }
+    updateInfoPanel(&image);
     updateStatus(&image);
 }
 
@@ -441,23 +527,22 @@ void MainWindow::thumbnailActivated(QListWidgetItem* item)
     }
 }
 
+
 void MainWindow::updateStatus(const DecodedImage* decoded)
 {
     if (currentPath_.isEmpty()) {
         fileStatusLabel_->setText("No file");
         indexStatusLabel_->setText("0 / 0");
-        metaStatusLabel_->setText("Idle");
+        statusBar()->hide();
         return;
     }
 
+    statusBar()->show();
     fileStatusLabel_->setText(QFileInfo(currentPath_).fileName());
     indexStatusLabel_->setText(QString("%1 / %2").arg(catalog_.currentIndex() + 1).arg(catalog_.size()));
 
     QStringList parts;
     if (decoded && decoded->isValid()) {
-        parts << QString("%1 x %2").arg(decoded->sourceSize.width()).arg(decoded->sourceSize.height());
-        parts << decoded->decoderName;
-        parts << currentDisplayModeLabel(decoded);
         parts << [this]() {
             switch (viewer_->displayMode()) {
             case ImageViewerWidget::DisplayMode::ActualSize:
@@ -470,13 +555,11 @@ void MainWindow::updateStatus(const DecodedImage* decoded)
             }
         }();
         parts << QString("Zoom %1%").arg(static_cast<int>(viewer_->zoomFactor() * 100.0));
-    } else if (decoded && !decoded->errorMessage.isEmpty()) {
-        parts << decoded->decoderName;
-        parts << "Error";
-    } else {
-        parts << "Loading";
     }
-    metaStatusLabel_->setText(parts.join(" | "));
+    if (decoded && !decoded->errorMessage.isEmpty()) {
+        parts << "Error";
+    }
+    statusBar()->showMessage(parts.join(" | "));
 }
 
 void MainWindow::setIntervalActionChecked(int intervalMs)
@@ -498,6 +581,7 @@ void MainWindow::createThumbnailStrip()
 {
     thumbnailStripContainer_ = new QWidget(this);
     thumbnailStripContainer_->setMaximumHeight(kThumbnailStripExpandedHeight);
+    thumbnailStripContainer_->setStyleSheet("background-color: black;");
     auto* layout = new QVBoxLayout(thumbnailStripContainer_);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
@@ -513,7 +597,23 @@ void MainWindow::createThumbnailStrip()
     thumbnailList_->setMaximumHeight(kThumbnailStripExpandedHeight);
     thumbnailList_->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     thumbnailList_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    thumbnailList_->setStyleSheet(R"(
+        QListWidget {
+            background: #000000;
+            color: #f0f0f0;
+            border: none;
+        }
+        QListWidget::item {
+            color: #f0f0f0;
+            padding: 4px 2px;
+        }
+        QListWidget::item:selected {
+            background: #2a82da;
+            color: #ffffff;
+        }
+    )");
     layout->addWidget(thumbnailList_);
+    thumbnailStripContainer_->hide();
 }
 
 void MainWindow::rebuildThumbnailStrip()
@@ -567,15 +667,25 @@ void MainWindow::updateThumbnailForPath(const QString& path, const QImage& image
 
 void MainWindow::requestThumbnail(const QString& path)
 {
+    enqueueThumbnailRequest(path, 0);
+    processPendingThumbnailRequests();
+}
+
+void MainWindow::enqueueThumbnailRequest(const QString& path, int priority)
+{
     if (path.isEmpty()
         || thumbnailCache_.contains(thumbnailKey(path))
         || thumbnailRequestsInFlight_.contains(path)
-        || thumbnailRequestQueue_.contains(path)) {
+        || std::any_of(thumbnailRequestQueue_.begin(), thumbnailRequestQueue_.end(), [&path](const ThumbnailJob& job) {
+               return job.path == path;
+           })) {
         return;
     }
 
-    thumbnailRequestQueue_.push_back(path);
-    processPendingThumbnailRequests();
+    thumbnailRequestQueue_.push_back({path, priority});
+    std::stable_sort(thumbnailRequestQueue_.begin(), thumbnailRequestQueue_.end(), [](const ThumbnailJob& lhs, const ThumbnailJob& rhs) {
+        return lhs.priority < rhs.priority;
+    });
 }
 
 void MainWindow::preloadThumbnailNeighbors()
@@ -589,8 +699,9 @@ void MainWindow::preloadThumbnailNeighbors()
     const int total = paths.size();
     for (int offset = -4; offset <= 4; ++offset) {
         const int wrapped = (index + offset + total) % total;
-        requestThumbnail(paths.at(wrapped));
+        enqueueThumbnailRequest(paths.at(wrapped), std::abs(offset));
     }
+    processPendingThumbnailRequests();
 }
 
 void MainWindow::requestVisibleThumbnails()
@@ -607,14 +718,16 @@ void MainWindow::requestVisibleThumbnails()
             || itemRect.left() > viewportRect.right() + kThumbnailSize) {
             continue;
         }
-        requestThumbnail(item->data(Qt::UserRole).toString());
+        enqueueThumbnailRequest(item->data(Qt::UserRole).toString(), i);
     }
+    processPendingThumbnailRequests();
 }
 
 void MainWindow::processPendingThumbnailRequests()
 {
     while (!thumbnailRequestQueue_.isEmpty() && thumbnailRequestsInFlight_.size() < kMaxThumbnailInflight) {
-        const QString path = thumbnailRequestQueue_.takeFirst();
+        const ThumbnailJob job = thumbnailRequestQueue_.takeFirst();
+        const QString path = job.path;
         thumbnailRequestsInFlight_.insert(path);
         auto* watcher = new QFutureWatcher<QImage>(this);
         connect(watcher, &QFutureWatcher<QImage>::finished, this, [this, watcher, path]() {
@@ -630,6 +743,58 @@ void MainWindow::processPendingThumbnailRequests()
             return ImageDecoder::decodeThumbnail(path, kThumbnailSize);
         }));
     }
+}
+
+void MainWindow::enqueueImagePrefetchRequest(const QString& path, DecodeMode mode, int priority)
+{
+    const QString key = prefetchKey(path, mode);
+    if (path.isEmpty()
+        || cache_.contains(path, mode)
+        || imagePrefetchRequestsInFlight_.contains(key)
+        || std::any_of(imagePrefetchRequestQueue_.begin(), imagePrefetchRequestQueue_.end(), [this, &key](const ImagePrefetchJob& job) {
+               return prefetchKey(job.path, job.mode) == key;
+           })) {
+        return;
+    }
+
+    imagePrefetchRequestQueue_.push_back({path, mode, priority});
+    std::stable_sort(imagePrefetchRequestQueue_.begin(), imagePrefetchRequestQueue_.end(), [](const ImagePrefetchJob& lhs, const ImagePrefetchJob& rhs) {
+        return lhs.priority < rhs.priority;
+    });
+}
+
+void MainWindow::processPendingImagePrefetchRequests()
+{
+    while (!imagePrefetchRequestQueue_.isEmpty() && imagePrefetchRequestsInFlight_.size() < kMaxImagePrefetchInflight) {
+        const ImagePrefetchJob job = imagePrefetchRequestQueue_.takeFirst();
+        const QString path = job.path;
+        const DecodeMode mode = job.mode;
+        const QString key = prefetchKey(path, mode);
+        imagePrefetchRequestsInFlight_.insert(key);
+        auto* watcher = new QFutureWatcher<DecodedImage>(this);
+        connect(watcher, &QFutureWatcher<DecodedImage>::finished, this, [this, watcher, path, mode, key]() {
+            const DecodedImage image = watcher->result();
+            watcher->deleteLater();
+            imagePrefetchRequestsInFlight_.remove(key);
+            if (image.isValid()) {
+                cache_.put(path, mode, image);
+            }
+            processPendingImagePrefetchRequests();
+        });
+        watcher->setFuture(QtConcurrent::run(&imageDecodePool_, [path, mode]() {
+            return ImageDecoder::decode(path, mode);
+        }));
+    }
+}
+
+QString MainWindow::prefetchKey(const QString& path, DecodeMode mode) const
+{
+    return path + "::" + QString::number(static_cast<int>(mode));
+}
+
+void MainWindow::setBrowseDirection(PrefetchScheduler::Direction direction)
+{
+    browseDirection_ = direction;
 }
 
 void MainWindow::setDisplayModeChecked(ImageViewerWidget::DisplayMode mode)
@@ -668,6 +833,17 @@ void MainWindow::toggleThumbnailStrip()
     setThumbnailStripVisible(!thumbnailStripVisible_);
 }
 
+void MainWindow::toggleInfoPanel()
+{
+    const bool nextVisible = !infoDock_ || !infoDock_->isVisible();
+    if (infoDock_) {
+        infoDock_->setVisible(nextVisible);
+    }
+    if (infoPanelAction_) {
+        infoPanelAction_->setChecked(nextVisible);
+    }
+}
+
 void MainWindow::setThumbnailStripVisible(bool visible)
 {
     thumbnailAutoHideEnabled_ = false;
@@ -694,16 +870,30 @@ void MainWindow::applyThumbnailStripVisibility(bool visible, bool animated)
     thumbnailStripVisible_ = visible;
     updateThumbnailActions();
 
+    if (visible) {
+        thumbnailStripContainer_->show();
+    }
+
     thumbnailStripAnimation_->stop();
     const int targetHeight = visible ? kThumbnailStripExpandedHeight : 0;
     if (!animated) {
         thumbnailStripContainer_->setMaximumHeight(targetHeight);
         thumbnailStripContainer_->setMinimumHeight(targetHeight);
+        if (!visible) {
+            thumbnailStripContainer_->hide();
+        }
         return;
     }
 
     thumbnailStripAnimation_->setStartValue(thumbnailStripContainer_->maximumHeight());
     thumbnailStripAnimation_->setEndValue(targetHeight);
+    if (!visible) {
+        connect(thumbnailStripAnimation_, &QPropertyAnimation::finished, this, [this]() {
+            if (!thumbnailStripVisible_) {
+                thumbnailStripContainer_->hide();
+            }
+        }, Qt::UniqueConnection);
+    }
     thumbnailStripAnimation_->start();
 }
 
@@ -716,6 +906,38 @@ void MainWindow::updateThumbnailActions()
     if (thumbnailAutoHideAction_) {
         thumbnailAutoHideAction_->setChecked(thumbnailAutoHideEnabled_);
     }
+}
+
+void MainWindow::updateInfoPanel(const DecodedImage* decoded)
+{
+    if (!infoText_) {
+        return;
+    }
+
+    if (currentPath_.isEmpty()) {
+        infoText_->setPlainText("No image selected.");
+        return;
+    }
+
+    QStringList lines;
+    lines << QString("File: %1").arg(QFileInfo(currentPath_).fileName());
+    lines << QString("Path: %1").arg(currentPath_);
+    if (decoded && decoded->isValid()) {
+        lines << QString("Decoder: %1").arg(decoded->decoderName);
+        lines << QString("Mode: %1").arg(decoded->isPreview ? "Fast Preview" : "Full Quality");
+        lines << QString("Size: %1 x %2").arg(decoded->sourceSize.width()).arg(decoded->sourceSize.height());
+        if (!decoded->metadataLines.isEmpty()) {
+            lines << "";
+            lines << "Metadata:";
+            lines << decoded->metadataLines;
+        }
+    } else if (decoded && !decoded->errorMessage.isEmpty()) {
+        lines << QString("Decoder: %1").arg(decoded->decoderName);
+        lines << QString("Error: %1").arg(decoded->errorMessage);
+    } else {
+        lines << "Loading...";
+    }
+    infoText_->setPlainText(lines.join('\n'));
 }
 
 void MainWindow::maybeShowThumbnailStripForCursor()

@@ -3,12 +3,14 @@
 #include "catalog/image_catalog.h"
 #include "core/image_cache.h"
 #include "core/image_types.h"
+#include "core/prefetch_scheduler.h"
 #include "viewer/image_viewer_widget.h"
 
 #include <QFutureWatcher>
 #include <QLabel>
 #include <QListWidget>
 #include <QMainWindow>
+#include <QPlainTextEdit>
 #include <QPixmap>
 #include <QPropertyAnimation>
 #include <QSet>
@@ -18,6 +20,7 @@
 
 class QAction;
 class QActionGroup;
+class QDockWidget;
 class SlideShowController;
 class QListWidgetItem;
 
@@ -50,10 +53,12 @@ private slots:
     void setThumbnailStripVisible(bool visible);
     void toggleAutoHideThumbnailStrip();
     void thumbnailActivated(QListWidgetItem* item);
+    void toggleInfoPanel();
 
 private:
     void createMenus();
     void createStatusBar();
+    void createInfoPanel();
     void createThumbnailStrip();
     void applyThumbnailStripVisibility(bool visible, bool animated);
     void updateThumbnailActions();
@@ -61,7 +66,7 @@ private:
     void openPath(const QString& path);
     void refreshCurrentImage();
     void requestImage(const QString& path, DecodeMode mode, bool displayWhenReady);
-    void preloadNeighbors();
+    void queuePrefetchForCurrentContext();
     void handleDecodedImage(const QString& path, DecodeMode mode, qint64 sequence, const DecodedImage& image);
     void displayDecodedImage(const DecodedImage& image);
     void rebuildThumbnailStrip();
@@ -71,14 +76,33 @@ private:
     void preloadThumbnailNeighbors();
     void requestVisibleThumbnails();
     void processPendingThumbnailRequests();
+    void processPendingImagePrefetchRequests();
     void updateStatus(const DecodedImage* decoded = nullptr);
+    void updateInfoPanel(const DecodedImage* decoded = nullptr);
     void setIntervalActionChecked(int intervalMs);
     void setDisplayModeChecked(ImageViewerWidget::DisplayMode mode);
     [[nodiscard]] QString currentDisplayModeLabel(const DecodedImage* decoded) const;
     [[nodiscard]] QString thumbnailKey(const QString& path) const;
+    void enqueueThumbnailRequest(const QString& path, int priority);
+    void enqueueImagePrefetchRequests(const QList<PrefetchScheduler::Request>& requests);
+    void enqueueImagePrefetchRequest(const QString& path, DecodeMode mode, int priority);
+    [[nodiscard]] QString prefetchKey(const QString& path, DecodeMode mode) const;
+    void setBrowseDirection(PrefetchScheduler::Direction direction);
+
+    struct ThumbnailJob {
+        QString path;
+        int priority = 0;
+    };
+
+    struct ImagePrefetchJob {
+        QString path;
+        DecodeMode mode = DecodeMode::FastPreview;
+        int priority = 0;
+    };
 
     ImageCatalog catalog_;
     ImageCache cache_;
+    PrefetchScheduler prefetchScheduler_;
     ImageViewerWidget* viewer_ = nullptr;
     SlideShowController* slideshow_ = nullptr;
     QListWidget* thumbnailList_ = nullptr;
@@ -92,6 +116,7 @@ private:
 
     QAction* playPauseAction_ = nullptr;
     QAction* fullscreenAction_ = nullptr;
+    QAction* infoPanelAction_ = nullptr;
     QAction* thumbnailStripAction_ = nullptr;
     QAction* thumbnailAutoHideAction_ = nullptr;
     QActionGroup* intervalActionGroup_ = nullptr;
@@ -101,9 +126,14 @@ private:
     QString currentPath_;
     QHash<QString, QPixmap> thumbnailCache_;
     QSet<QString> thumbnailRequestsInFlight_;
-    QStringList thumbnailRequestQueue_;
+    QList<ThumbnailJob> thumbnailRequestQueue_;
+    QSet<QString> imagePrefetchRequestsInFlight_;
+    QList<ImagePrefetchJob> imagePrefetchRequestQueue_;
     QPropertyAnimation* thumbnailStripAnimation_ = nullptr;
     QTimer* thumbnailAutoHideTimer_ = nullptr;
+    QDockWidget* infoDock_ = nullptr;
+    QPlainTextEdit* infoText_ = nullptr;
+    PrefetchScheduler::Direction browseDirection_ = PrefetchScheduler::Direction::Unknown;
     bool thumbnailStripVisible_ = true;
     bool thumbnailAutoHideEnabled_ = false;
 };

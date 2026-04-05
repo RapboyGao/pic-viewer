@@ -1,7 +1,9 @@
 #pragma once
 
 #include <QImage>
+#include <QPushButton>
 #include <QPointF>
+#include <QVBoxLayout>
 #include <QWidget>
 
 class ImageViewerWidget : public QWidget
@@ -26,6 +28,7 @@ public:
     void setDisplayMode(DisplayMode mode);
     [[nodiscard]] double zoomFactor() const;
     [[nodiscard]] DisplayMode displayMode() const;
+    [[nodiscard]] bool hasImage() const;
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -35,6 +38,11 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
+
+signals:
+    void openFileRequested();
+    void openFolderRequested();
 
 private:
     void applyZoom(double factor, const QPointF& anchor);
@@ -44,6 +52,7 @@ private:
     [[nodiscard]] QSize baseSize() const;
     [[nodiscard]] bool shouldUseSmoothSampling(const QRectF& target) const;
     void resetViewTransform();
+    void updateEmptyStateUi();
 
     QImage image_;
     QString title_;
@@ -53,4 +62,7 @@ private:
     QPointF panOffset_;
     bool dragging_ = false;
     QPoint lastDragPos_;
+    QWidget* emptyStateContainer_ = nullptr;
+    QPushButton* openFileButton_ = nullptr;
+    QPushButton* openFolderButton_ = nullptr;
 };

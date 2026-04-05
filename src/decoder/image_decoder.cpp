@@ -26,6 +26,14 @@ DecodedImage makeError(const QString& path, const QString& decoder, const QStrin
     return result;
 }
 
+QString safeLatin1(const char* value)
+{
+    if (!value || !*value) {
+        return {};
+    }
+    return QString::fromLatin1(value);
+}
+
 DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
 {
     QImageReader reader(path);
@@ -240,6 +248,20 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     result.filePath = path;
     result.decoderName = "LibRaw";
     const int rawFlip = rawProcessor.imgdata.sizes.flip;
+    result.metadataLines = {
+        QString("Camera: %1 %2").arg(safeLatin1(rawProcessor.imgdata.idata.make), safeLatin1(rawProcessor.imgdata.idata.model)),
+        QString("Lens: %1").arg(safeLatin1(rawProcessor.imgdata.lens.Lens)),
+        QString("ISO: %1").arg(rawProcessor.imgdata.other.iso_speed > 0.0f ? QString::number(rawProcessor.imgdata.other.iso_speed, 'f', 0) : QString("Unknown")),
+        QString("Shutter: %1").arg(rawProcessor.imgdata.other.shutter > 0.0f ? QString::number(rawProcessor.imgdata.other.shutter, 'f', 4) : QString("Unknown")),
+        QString("Aperture: %1").arg(rawProcessor.imgdata.other.aperture > 0.0f ? QString::number(rawProcessor.imgdata.other.aperture, 'f', 1) : QString("Unknown")),
+        QString("Focal length: %1").arg(rawProcessor.imgdata.other.focal_len > 0.0f ? QString::number(rawProcessor.imgdata.other.focal_len, 'f', 1) : QString("Unknown")),
+    };
+    if (rawProcessor.imgdata.other.parsed_gps.gpsparsed) {
+        const auto& gps = rawProcessor.imgdata.other.parsed_gps;
+        result.metadataLines << QString("GPS: %1, %2")
+                                     .arg(QString::number(gps.latitude[0], 'f', 6))
+                                     .arg(QString::number(gps.longitude[0], 'f', 6));
+    }
 
     libraw_processed_image_t* previewImage = nullptr;
     if (mode == DecodeMode::FastPreview) {
@@ -293,8 +315,11 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
         return makeError(path, "LibRaw", QString::fromLatin1(libraw_strerror(unpackResult)));
     }
 
+    // Keep the full RAW output visually consistent with the embedded preview.
+    // Disabling auto-brightness makes many Sony RAW files look noticeably darker
+    // once the background full-quality pass replaces the preview.
     rawProcessor.imgdata.params.use_camera_wb = 1;
-    rawProcessor.imgdata.params.no_auto_bright = 1;
+    rawProcessor.imgdata.params.no_auto_bright = 0;
 
     const int processResult = rawProcessor.dcraw_process();
     if (processResult != LIBRAW_SUCCESS) {

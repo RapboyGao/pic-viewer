@@ -5,9 +5,10 @@ vcpkg_installed/
 # Local logs and generated setup markers
 aqtinstall.log
 Configuring
+App
 
 # OS / editor / user-specific files
 .DS_Store
-.vscode/
+# .vscode/
 *.user
 *.autosave

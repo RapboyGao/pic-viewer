@@ -36,6 +36,17 @@ export PATH="/opt/homebrew/opt/qt/bin:$PATH"
 export PKG_CONFIG_PATH="/opt/homebrew/opt/qt/lib/pkgconfig:/opt/homebrew/lib/pkgconfig:$PKG_CONFIG_PATH"
 ```
 
+Windows (Scoop):
+
+- Install Visual Studio 2022 Build Tools with the "Desktop development with C++" workload
+- Then run:
+
+```bat
+scripts\install-dev-env.bat
+```
+
+The script installs Scoop, core tools, Qt, and the image libraries it can resolve from Scoop buckets, then writes the relevant user environment variables.
+
 ## Build
 
 ```bash
@@ -55,6 +66,8 @@ Windows:
 set QT_PREFIX=C:\Qt\6.9.0\msvc2022_64
 scripts\build.bat
 ```
+
+If you already ran the Windows environment installer, `QT_PREFIX` should already be set for new shells.
 
 ## Run
 

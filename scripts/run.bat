@@ -6,8 +6,17 @@ for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%BUILD_CONFIG%"=="" set "BUILD_CONFIG=Release"
+set "BUILD_WORK_DIR=%BUILD_DIR%\_work-%BUILD_CONFIG%"
+for /f "delims=" %%I in ('dir /b /ad /o-d "%BUILD_DIR%\_work-%BUILD_CONFIG%-*" 2^>nul') do (
+  if exist "%BUILD_DIR%\%%I\%BUILD_CONFIG%\pic-viewer.exe" (
+    set "BUILD_WORK_DIR=%BUILD_DIR%\%%I"
+    goto :workdir_found
+  )
+)
+:workdir_found
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
-set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
+set "APP_PATH=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
+if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
 if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\Release\pic-viewer.exe"
 if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\RelWithDebInfo\pic-viewer.exe"
 if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\pic-viewer.exe"
@@ -18,7 +27,8 @@ if not exist "%APP_PATH%" (
   set "BUILD_CONFIG=%BUILD_CONFIG%"
   call "%ROOT_DIR%\scripts\build.bat"
   if errorlevel 1 exit /b 1
-  set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
+  set "APP_PATH=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
+  if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
   if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\Release\pic-viewer.exe"
   if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\RelWithDebInfo\pic-viewer.exe"
   if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\pic-viewer.exe"

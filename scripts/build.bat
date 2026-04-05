@@ -10,6 +10,7 @@ set "VCPKG_DEFAULT_PREFIX=%ROOT_DIR%\vcpkg_installed\x64-windows"
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%RUN_TESTS%"=="" set "RUN_TESTS=1"
 if "%BUILD_CONFIG%"=="" set "BUILD_CONFIG=Debug"
+if "%BUILD_WORK_DIR%"=="" set "BUILD_WORK_DIR=%BUILD_DIR%\_work-%BUILD_CONFIG%-%RANDOM%%RANDOM%"
 
 if "%QT_PREFIX%"=="" (
   if not "%Qt6_DIR%"=="" (
@@ -23,6 +24,37 @@ if not exist "%VCPKG_TOOLCHAIN%" (
 )
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+mkdir "%BUILD_WORK_DIR%"
+
+rem Stop any running copies so the linker can overwrite the executables.
+taskkill /IM pic-viewer.exe /F >nul 2>nul
+taskkill /IM test_image_catalog.exe /F >nul 2>nul
+taskkill /IM test_slide_show_controller.exe /F >nul 2>nul
+taskkill /IM test_prefetch_scheduler.exe /F >nul 2>nul
+taskkill /IM test_image_decoder.exe /F >nul 2>nul
+
+for /L %%I in (1,1,10) do (
+  powershell -NoProfile -Command "if (Get-Process pic-viewer,test_image_catalog,test_slide_show_controller,test_prefetch_scheduler,test_image_decoder -ErrorAction SilentlyContinue) { exit 1 } else { exit 0 }"
+  if not errorlevel 1 goto :processes_cleared
+  timeout /t 1 /nobreak >nul
+)
+:processes_cleared
+
+for %%F in (
+  "%BUILD_DIR%\Debug\pic-viewer.exe"
+  "%BUILD_DIR%\Release\pic-viewer.exe"
+  "%BUILD_DIR%\RelWithDebInfo\pic-viewer.exe"
+  "%BUILD_DIR%\Debug\test_image_catalog.exe"
+  "%BUILD_DIR%\Release\test_image_catalog.exe"
+  "%BUILD_DIR%\Debug\test_slide_show_controller.exe"
+  "%BUILD_DIR%\Release\test_slide_show_controller.exe"
+  "%BUILD_DIR%\Debug\test_prefetch_scheduler.exe"
+  "%BUILD_DIR%\Release\test_prefetch_scheduler.exe"
+  "%BUILD_DIR%\Debug\test_image_decoder.exe"
+  "%BUILD_DIR%\Release\test_image_decoder.exe"
+) do (
+  if exist "%%~F" del /F /Q "%%~F" >nul 2>nul
+)
 
 if "%QT_PREFIX%"=="" (
   if exist "%VCPKG_DEFAULT_PREFIX%" set "QT_PREFIX=%VCPKG_DEFAULT_PREFIX%"
@@ -44,34 +76,21 @@ if not exist "%QT_PREFIX%\share\Qt6\Qt6Config.cmake" if not exist "%QT_PREFIX%\s
 )
 
 echo ==> Configuring with vcpkg toolchain: %VCPKG_TOOLCHAIN%
-cmake -S "%ROOT_DIR%" -B "%BUILD_DIR%" -DCMAKE_TOOLCHAIN_FILE="%VCPKG_TOOLCHAIN%" -DVCPKG_MANIFEST_DIR="%ROOT_DIR%" -DVCPKG_INSTALLED_DIR="%VCPKG_ROOT%\installed" -DCMAKE_PREFIX_PATH="%QT_PREFIX%"
+cmake -S "%ROOT_DIR%" -B "%BUILD_WORK_DIR%" -DCMAKE_TOOLCHAIN_FILE="%VCPKG_TOOLCHAIN%" -DVCPKG_MANIFEST_DIR="%ROOT_DIR%" -DVCPKG_INSTALLED_DIR="%VCPKG_ROOT%\installed" -DCMAKE_PREFIX_PATH="%QT_PREFIX%"
 if errorlevel 1 exit /b 1
 
 echo ==> Building
-cmake --build "%BUILD_DIR%" --config "%BUILD_CONFIG%" --parallel
+cmake --build "%BUILD_WORK_DIR%" --config "%BUILD_CONFIG%" -- /m:1
 if errorlevel 1 exit /b 1
-
-set "APP_DIR=%BUILD_DIR%\%BUILD_CONFIG%"
-if exist "%APP_DIR%" (
-  set "WINDEPLOYQT=%VCPKG_ROOT%\installed\x64-windows\tools\Qt6\bin\windeployqt.exe"
-  set "APP_EXE=%APP_DIR%\pic-viewer.exe"
-  if exist "%WINDEPLOYQT%" if exist "%APP_EXE%" (
-    if /I "%BUILD_CONFIG%"=="Debug" (
-      "%WINDEPLOYQT%" --debug --compiler-runtime --dir "%APP_DIR%" "%APP_EXE%"
-    ) else (
-      "%WINDEPLOYQT%" --release --compiler-runtime --dir "%APP_DIR%" "%APP_EXE%"
-    )
-  )
-)
 
 if "%RUN_TESTS%"=="1" (
   echo ==> Running tests
-  ctest --test-dir "%BUILD_DIR%" -C "%BUILD_CONFIG%" --output-on-failure
+  ctest --test-dir "%BUILD_WORK_DIR%" -C "%BUILD_CONFIG%" --output-on-failure
   if errorlevel 1 exit /b 1
 )
 
-if exist "%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe" (
-  echo ==> Build complete: %BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe
+if exist "%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe" (
+  echo ==> Build complete: %BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe
 ) else (
   echo ==> Build complete
 )

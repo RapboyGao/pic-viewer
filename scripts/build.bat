@@ -6,6 +6,7 @@ for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
 set "VCPKG_TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
 set "VCPKG_DEFAULT_PREFIX=%ROOT_DIR%\vcpkg_installed\x64-windows"
+set "MSBUILD_EXE=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe"
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%RUN_TESTS%"=="" set "RUN_TESTS=1"
@@ -23,17 +24,15 @@ if not exist "%VCPKG_TOOLCHAIN%" (
   exit /b 1
 )
 
+if not exist "%MSBUILD_EXE%" (
+  echo error: MSBuild not found at "%MSBUILD_EXE%".
+  exit /b 1
+)
+
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 mkdir "%BUILD_WORK_DIR%"
 
 rem Stop any running copies so the linker can overwrite the executables.
-taskkill /IM pic-viewer.exe /F /T >nul 2>nul
-taskkill /IM test_image_catalog.exe /F /T >nul 2>nul
-taskkill /IM test_slide_show_controller.exe /F /T >nul 2>nul
-taskkill /IM test_prefetch_scheduler.exe /F /T >nul 2>nul
-taskkill /IM test_image_decoder.exe /F /T >nul 2>nul
-timeout /t 2 /nobreak >nul
-
 for %%F in (
   "%BUILD_DIR%\Debug\pic-viewer.exe"
   "%BUILD_DIR%\Release\pic-viewer.exe"
@@ -70,25 +69,32 @@ if not exist "%QT_PREFIX%\share\Qt6\Qt6Config.cmake" if not exist "%QT_PREFIX%\s
 )
 
 echo ==> Configuring with vcpkg toolchain: %VCPKG_TOOLCHAIN%
-cmake -S "%ROOT_DIR%" -B "%BUILD_WORK_DIR%" -DCMAKE_TOOLCHAIN_FILE="%VCPKG_TOOLCHAIN%" -DVCPKG_MANIFEST_DIR="%ROOT_DIR%" -DVCPKG_INSTALLED_DIR="%VCPKG_ROOT%\installed" -DCMAKE_PREFIX_PATH="%QT_PREFIX%"
+cmake -S "%ROOT_DIR%" -B "%BUILD_WORK_DIR%" -DCMAKE_TOOLCHAIN_FILE="%VCPKG_TOOLCHAIN%" -DVCPKG_MANIFEST_DIR="%ROOT_DIR%" -DVCPKG_INSTALLED_DIR="%VCPKG_ROOT%\installed" -DVCPKG_APPLOCAL_DEPS=OFF -DCMAKE_PREFIX_PATH="%QT_PREFIX%"
 if errorlevel 1 exit /b 1
 
 echo ==> Building
 if "%RUN_TESTS%"=="1" (
-  cmake --build "%BUILD_WORK_DIR%" --config "%BUILD_CONFIG%" -- /m:1
+  "%MSBUILD_EXE%" "%BUILD_WORK_DIR%\pic-viewer.vcxproj" /t:Build /p:Configuration=%BUILD_CONFIG% /p:Platform=x64 /m:1 /nologo
 ) else (
-  cmake --build "%BUILD_WORK_DIR%" --config "%BUILD_CONFIG%" --target pic-viewer -- /m:1
+  "%MSBUILD_EXE%" "%BUILD_WORK_DIR%\pic-viewer.vcxproj" /t:Build /p:Configuration=%BUILD_CONFIG% /p:Platform=x64 /m:1 /nologo
 )
 if errorlevel 1 exit /b 1
+
+if "%RUN_TESTS%"=="1" (
+  "%MSBUILD_EXE%" "%BUILD_WORK_DIR%\test_image_catalog.vcxproj" /t:Build /p:Configuration=%BUILD_CONFIG% /p:Platform=x64 /m:1 /nologo
+  if errorlevel 1 exit /b 1
+  "%MSBUILD_EXE%" "%BUILD_WORK_DIR%\test_slide_show_controller.vcxproj" /t:Build /p:Configuration=%BUILD_CONFIG% /p:Platform=x64 /m:1 /nologo
+  if errorlevel 1 exit /b 1
+  "%MSBUILD_EXE%" "%BUILD_WORK_DIR%\test_prefetch_scheduler.vcxproj" /t:Build /p:Configuration=%BUILD_CONFIG% /p:Platform=x64 /m:1 /nologo
+  if errorlevel 1 exit /b 1
+  "%MSBUILD_EXE%" "%BUILD_WORK_DIR%\test_image_decoder.vcxproj" /t:Build /p:Configuration=%BUILD_CONFIG% /p:Platform=x64 /m:1 /nologo
+  if errorlevel 1 exit /b 1
+)
 
 if "%RUN_TESTS%"=="1" (
   echo ==> Running tests
   ctest --test-dir "%BUILD_WORK_DIR%" -C "%BUILD_CONFIG%" --output-on-failure
   if errorlevel 1 exit /b 1
 )
-
-if exist "%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe" (
-  echo ==> Build complete: %BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe
-) else (
-  echo ==> Build complete
-)
+echo ==> Build complete
+exit /b 0

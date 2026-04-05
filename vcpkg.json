@@ -1,0 +1,19 @@
+{
+  "name": "pic-viewer",
+  "version-string": "0.1.0",
+  "description": "Cross-platform desktop image viewer built with C++20, Qt 6, and CMake.",
+  "dependencies": [
+    "qtbase",
+    "qttools",
+    "libjpeg-turbo",
+    "libraw",
+    {
+      "name": "libheif",
+      "default-features": false,
+      "features": [
+        "aom",
+        "jpeg"
+      ]
+    }
+  ]
+}

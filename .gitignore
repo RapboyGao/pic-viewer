@@ -1,4 +1,13 @@
 build/
+.deps/
+vcpkg_installed/
+
+# Local logs and generated setup markers
+aqtinstall.log
+Configuring
+
+# OS / editor / user-specific files
 .DS_Store
+.vscode/
 *.user
 *.autosave

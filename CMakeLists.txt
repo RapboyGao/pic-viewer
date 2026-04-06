@@ -59,6 +59,7 @@ set(PIC_VIEWER_HEADERS
 )
 
 qt_add_executable(pic-viewer
+    WIN32
     MANUAL_FINALIZATION
     ${PIC_VIEWER_SOURCES}
     ${PIC_VIEWER_HEADERS}

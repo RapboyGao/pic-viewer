@@ -17,7 +17,8 @@ if(APPLE)
     set(WrapOpenGL_AGL "${CMAKE_OSX_SYSROOT}/System/Library/Frameworks/OpenGL.framework" CACHE FILEPATH "Compatibility shim for Qt WrapOpenGL on modern macOS" FORCE)
 endif()
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Concurrent Test)
+# Keep the minimum at 6.4 so Ubuntu 24.04's Qt 6.4.2 can build the project in CI.
+find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Test)
 find_package(JPEG REQUIRED)
 find_package(PkgConfig REQUIRED)
 

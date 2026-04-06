@@ -4,6 +4,7 @@ setlocal enabledelayedexpansion
 set "ROOT_DIR=%~dp0.."
 for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
+set "VCPKG_EXE=%VCPKG_ROOT%\vcpkg.exe"
 set "VCPKG_TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
 set "VCPKG_DEFAULT_PREFIX=%ROOT_DIR%\vcpkg_installed\x64-windows"
 set "MSBUILD_EXE="
@@ -25,6 +26,16 @@ if "%QT_PREFIX%"=="" (
 if not exist "%VCPKG_TOOLCHAIN%" (
   echo error: vcpkg toolchain not found at "%VCPKG_TOOLCHAIN%".
   exit /b 1
+)
+
+if not exist "%VCPKG_DEFAULT_PREFIX%\share\Qt6\Qt6Config.cmake" if not exist "%VCPKG_DEFAULT_PREFIX%\share\qt6\Qt6Config.cmake" (
+  if not exist "%VCPKG_EXE%" (
+    echo error: vcpkg executable not found at "%VCPKG_EXE%".
+    exit /b 1
+  )
+  echo ==> Installing vcpkg manifest dependencies
+  "%VCPKG_EXE%" install --triplet x64-windows --x-manifest-root="%ROOT_DIR%" --x-install-root="%ROOT_DIR%\vcpkg_installed"
+  if errorlevel 1 exit /b 1
 )
 
 if not defined MSBUILD_EXE (

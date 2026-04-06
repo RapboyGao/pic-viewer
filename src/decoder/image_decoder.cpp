@@ -1,5 +1,7 @@
 #include "decoder/image_decoder.h"
 
+#include "app/app_language.h"
+
 #include <QFileInfo>
 #include <QDateTime>
 #include <QImage>
@@ -16,6 +18,8 @@
 #include <jpeglib.h>
 #include <libheif/heif.h>
 #include <libraw/libraw.h>
+
+using AppI18n::uiText;
 
 namespace {
 
@@ -36,6 +40,8 @@ QString safeLatin1(const char* value)
     return QString::fromLatin1(value);
 }
 
+QString translateMetadataLabel(const QString& label);
+
 QStringList collectQtTextMetadata(QImageReader& reader)
 {
     QStringList metadata;
@@ -43,10 +49,222 @@ QStringList collectQtTextMetadata(QImageReader& reader)
     for (const QString& key : keys) {
         const QString value = reader.text(key);
         if (!value.isEmpty()) {
-            metadata << QString("%1: %2").arg(key, value);
+            metadata << QString("%1: %2").arg(translateMetadataLabel(key), value);
         }
     }
     return metadata;
+}
+
+QString decodeUnknownText()
+{
+    return uiText("Unknown", "未知");
+}
+
+QString translateMetadataLabel(const QString& label)
+{
+    const QString normalized = label.trimmed().toLower();
+    if (normalized == "camera") {
+        return uiText("Camera", "相机");
+    }
+    if (normalized == "lens") {
+        return uiText("Lens", "镜头");
+    }
+    if (normalized == "iso") {
+        return uiText("ISO", "ISO");
+    }
+    if (normalized == "shutter") {
+        return uiText("Shutter", "快门");
+    }
+    if (normalized == "aperture") {
+        return uiText("Aperture", "光圈");
+    }
+    if (normalized == "focal length") {
+        return uiText("Focal length", "焦距");
+    }
+    if (normalized == "capture time") {
+        return uiText("Capture time", "拍摄时间");
+    }
+    if (normalized == "shot order") {
+        return uiText("Shot order", "拍摄序号");
+    }
+    if (normalized == "description") {
+        return uiText("Description", "说明");
+    }
+    if (normalized == "artist") {
+        return uiText("Artist", "作者");
+    }
+    if (normalized == "gps latitude") {
+        return uiText("GPS latitude", "GPS 纬度");
+    }
+    if (normalized == "gps longitude") {
+        return uiText("GPS longitude", "GPS 经度");
+    }
+    if (normalized == "gps altitude") {
+        return uiText("GPS altitude", "GPS 海拔");
+    }
+    return label;
+}
+
+QString translateExternalErrorMessage(const QString& message)
+{
+    const QString normalized = message.trimmed().toLower();
+    if (normalized.isEmpty()) {
+        return message;
+    }
+
+    if (normalized == "unsupported image format") {
+        return uiText("Unsupported image format.", "不支持的图像格式。");
+    }
+    if (normalized.contains("unsupported")) {
+        return uiText("Unsupported format or feature.", "不支持的格式或功能。");
+    }
+    if (normalized.contains("unable to read image data") || normalized.contains("cannot read image data")) {
+        return uiText("Unable to read image data.", "无法读取图像数据。");
+    }
+    if (normalized.contains("device not open")) {
+        return uiText("Device not open.", "设备未打开。");
+    }
+    if (normalized.contains("invalid device")) {
+        return uiText("Invalid device.", "无效设备。");
+    }
+    if (normalized.contains("not found")) {
+        return uiText("File not found.", "未找到文件。");
+    }
+    if (normalized.contains("permission denied")) {
+        return uiText("Permission denied.", "权限不足。");
+    }
+    if (normalized.contains("i/o error") || normalized.contains("input/output error")) {
+        return uiText("I/O error.", "输入/输出错误。");
+    }
+    if (normalized.contains("corrupt")) {
+        return uiText("Corrupted data.", "数据损坏。");
+    }
+    if (normalized.contains("out of memory")) {
+        return uiText("Out of memory.", "内存不足。");
+    }
+    if (normalized.contains("allocation failed") || normalized.contains("cannot allocate")) {
+        return uiText("Allocation failed.", "内存分配失败。");
+    }
+    if (normalized.contains("end of file")) {
+        return uiText("Unexpected end of file.", "文件意外结束。");
+    }
+    if (normalized.contains("invalid")) {
+        return uiText("Invalid data.", "无效数据。");
+    }
+    if (normalized.contains("cannot")) {
+        return uiText("Operation failed.", "操作失败。");
+    }
+    if (normalized.contains("failed")) {
+        return uiText("Operation failed.", "操作失败。");
+    }
+    return message;
+}
+
+QString translateQtImageReaderErrorMessage(const QString& message)
+{
+    const QString normalized = message.trimmed().toLower();
+    if (normalized.isEmpty()) {
+        return message;
+    }
+
+    if (normalized == "unsupported image format") {
+        return uiText("Unsupported image format.", "不支持的图像格式。");
+    }
+    if (normalized.contains("unable to read image data") || normalized.contains("cannot read image data")) {
+        return uiText("Unable to read image data.", "无法读取图像数据。");
+    }
+    if (normalized.contains("premature end of jpeg file") || normalized.contains("unexpected end of file") || normalized.contains("premature end of document")) {
+        return uiText("Unexpected end of file.", "文件意外结束。");
+    }
+    if (normalized.contains("invalid device")) {
+        return uiText("Invalid device.", "无效设备。");
+    }
+    if (normalized.contains("device not open")) {
+        return uiText("Device not open.", "设备未打开。");
+    }
+    if (normalized.contains("not enough memory") || normalized.contains("allocation failed") || normalized.contains("out of memory")) {
+        return uiText("Out of memory.", "内存不足。");
+    }
+    if (normalized.contains("file not found")) {
+        return uiText("File not found.", "未找到文件。");
+    }
+    if (normalized.contains("corrupt") || normalized.contains("invalid data")) {
+        return uiText("Corrupted data.", "数据损坏。");
+    }
+    if (normalized.contains("read error")) {
+        return uiText("Read error.", "读取错误。");
+    }
+    if (normalized.contains("unknown error")) {
+        return uiText("Unknown error.", "未知错误。");
+    }
+
+    return translateExternalErrorMessage(message);
+}
+
+QString localizedDecoderError(const QString& decoder, const QString& message);
+
+QString translateLibRawError(int errorCode, const QString& fallbackMessage)
+{
+    switch (errorCode) {
+    case LIBRAW_SUCCESS:
+        return uiText("Success.", "成功。");
+    case LIBRAW_UNSPECIFIED_ERROR:
+        return uiText("LibRaw reported an unspecified error.", "LibRaw 返回了未指定错误。");
+    case LIBRAW_FILE_UNSUPPORTED:
+        return uiText("Unsupported RAW file format.", "不支持的 RAW 文件格式。");
+    case LIBRAW_REQUEST_FOR_NONEXISTENT_IMAGE:
+        return uiText("Requested image does not exist.", "请求的图像不存在。");
+    case LIBRAW_OUT_OF_ORDER_CALL:
+        return uiText("Operation called in the wrong order.", "操作调用顺序不正确。");
+    case LIBRAW_NO_THUMBNAIL:
+        return uiText("No embedded thumbnail is available.", "没有可用的嵌入缩略图。");
+    case LIBRAW_UNSUPPORTED_THUMBNAIL:
+        return uiText("Embedded thumbnail format is not supported.", "嵌入缩略图格式不受支持。");
+    case LIBRAW_INPUT_CLOSED:
+        return uiText("Input stream is closed.", "输入流已关闭。");
+    case LIBRAW_NOT_IMPLEMENTED:
+        return uiText("Feature not implemented.", "功能尚未实现。");
+    case LIBRAW_REQUEST_FOR_NONEXISTENT_THUMBNAIL:
+        return uiText("Requested thumbnail does not exist.", "请求的缩略图不存在。");
+    case LIBRAW_UNSUFFICIENT_MEMORY:
+        return uiText("Insufficient memory.", "内存不足。");
+    case LIBRAW_DATA_ERROR:
+        return uiText("Corrupted RAW data.", "RAW 数据损坏。");
+    case LIBRAW_IO_ERROR:
+        return uiText("Input/output error.", "输入/输出错误。");
+    case LIBRAW_CANCELLED_BY_CALLBACK:
+        return uiText("Operation cancelled.", "操作已取消。");
+    case LIBRAW_BAD_CROP:
+        return uiText("Invalid crop information.", "裁剪信息无效。");
+    case LIBRAW_TOO_BIG:
+        return uiText("File is too large.", "文件过大。");
+    case LIBRAW_MEMPOOL_OVERFLOW:
+        return uiText("Memory pool overflow.", "内存池溢出。");
+    default:
+        break;
+    }
+
+    return localizedDecoderError("LibRaw", fallbackMessage);
+}
+
+QString localizedDecoderError(const QString& decoder, const QString& message)
+{
+    const QString decoderLabel = [decoder]() {
+        if (decoder == "libheif") {
+            return uiText("HEIF decoder", "HEIF 解码器");
+        }
+        if (decoder == "LibRaw") {
+            return uiText("RAW decoder", "RAW 解码器");
+        }
+        if (decoder == "jpeg-turbo") {
+            return uiText("JPEG decoder", "JPEG 解码器");
+        }
+        if (decoder == "qt-imageio") {
+            return uiText("Qt image reader", "Qt 图像读取器");
+        }
+        return decoder;
+    }();
+    return uiText("%1 error: %2", "%1 错误：%2").arg(decoderLabel, translateExternalErrorMessage(message));
 }
 
 int openRawFile(LibRaw& rawProcessor, const QString& path)
@@ -72,7 +290,11 @@ DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
     result.image = reader.read();
     result.sourceSize = sourceSize.isValid() ? sourceSize : result.image.size();
     if (result.image.isNull()) {
-        result.errorMessage = reader.errorString();
+        if (decoder == "qt-imageio") {
+            result.errorMessage = uiText("Qt image reader error: %1", "Qt 图像读取器错误：%1").arg(translateQtImageReaderErrorMessage(reader.errorString()));
+        } else {
+            result.errorMessage = localizedDecoderError(decoder, reader.errorString());
+        }
     } else {
         result.metadataLines = collectQtTextMetadata(reader);
     }
@@ -112,7 +334,7 @@ DecodedImage decodeJpeg(const QString& path)
 {
     FILE* file = std::fopen(path.toUtf8().constData(), "rb");
     if (!file) {
-        return makeError(path, "jpeg-turbo", "Failed to open JPEG file.");
+        return makeError(path, "jpeg-turbo", uiText("Failed to open JPEG file.", "无法打开 JPEG 文件。"));
     }
 
     jpeg_decompress_struct cinfo {};
@@ -164,19 +386,19 @@ DecodedImage decodeHeif(const QString& path)
 {
     heif_context* rawContext = heif_context_alloc();
     if (!rawContext) {
-        return makeError(path, "libheif", "Failed to allocate HEIF context.");
+        return makeError(path, "libheif", uiText("Failed to allocate HEIF context.", "无法分配 HEIF 上下文。"));
     }
     std::unique_ptr<heif_context, decltype(&heif_context_free)> context(rawContext, &heif_context_free);
 
     const heif_error readError = heif_context_read_from_file(context.get(), path.toUtf8().constData(), nullptr);
     if (readError.code != heif_error_Ok) {
-        return makeError(path, "libheif", QString::fromUtf8(readError.message));
+        return makeError(path, "libheif", localizedDecoderError("libheif", QString::fromUtf8(readError.message)));
     }
 
     heif_image_handle* rawHandle = nullptr;
     const heif_error handleError = heif_context_get_primary_image_handle(context.get(), &rawHandle);
     if (handleError.code != heif_error_Ok) {
-        return makeError(path, "libheif", QString::fromUtf8(handleError.message));
+        return makeError(path, "libheif", localizedDecoderError("libheif", QString::fromUtf8(handleError.message)));
     }
     std::unique_ptr<heif_image_handle, decltype(&heif_image_handle_release)> handle(rawHandle, &heif_image_handle_release);
 
@@ -191,7 +413,7 @@ DecodedImage decodeHeif(const QString& path)
         heif_chroma_interleaved_RGBA,
         options);
     if (decodeError.code != heif_error_Ok) {
-        return makeError(path, "libheif", QString::fromUtf8(decodeError.message));
+        return makeError(path, "libheif", localizedDecoderError("libheif", QString::fromUtf8(decodeError.message)));
     }
     std::unique_ptr<heif_image, decltype(&heif_image_release)> image(rawImage, &heif_image_release);
 
@@ -200,7 +422,7 @@ DecodedImage decodeHeif(const QString& path)
     const int width = heif_image_get_width(image.get(), heif_channel_interleaved);
     const int height = heif_image_get_height(image.get(), heif_channel_interleaved);
     if (!data || width <= 0 || height <= 0) {
-        return makeError(path, "libheif", "Decoded HEIF image is empty.");
+        return makeError(path, "libheif", uiText("Decoded HEIF image is empty.", "解码后的 HEIF 图像为空。"));
     }
 
     QImage qimage(data, width, height, stride, QImage::Format_RGBA8888);
@@ -276,7 +498,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     LibRaw rawProcessor;
     const int openResult = openRawFile(rawProcessor, path);
     if (openResult != LIBRAW_SUCCESS) {
-        return makeError(path, "LibRaw", QString::fromLatin1(libraw_strerror(openResult)));
+        return makeError(path, "LibRaw", translateLibRawError(openResult, QString::fromLatin1(libraw_strerror(openResult))));
     }
 
     auto recycle = [&rawProcessor]() {
@@ -288,30 +510,31 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     result.decoderName = "LibRaw";
     const int rawFlip = rawProcessor.imgdata.sizes.flip;
     result.metadataLines = {
-        QString("Camera: %1 %2").arg(safeLatin1(rawProcessor.imgdata.idata.make), safeLatin1(rawProcessor.imgdata.idata.model)),
-        QString("Lens: %1").arg(safeLatin1(rawProcessor.imgdata.lens.Lens)),
-        QString("ISO: %1").arg(rawProcessor.imgdata.other.iso_speed > 0.0f ? QString::number(rawProcessor.imgdata.other.iso_speed, 'f', 0) : QString("Unknown")),
-        QString("Shutter: %1").arg(rawProcessor.imgdata.other.shutter > 0.0f ? QString::number(rawProcessor.imgdata.other.shutter, 'f', 4) : QString("Unknown")),
-        QString("Aperture: %1").arg(rawProcessor.imgdata.other.aperture > 0.0f ? QString::number(rawProcessor.imgdata.other.aperture, 'f', 1) : QString("Unknown")),
-        QString("Focal length: %1").arg(rawProcessor.imgdata.other.focal_len > 0.0f ? QString::number(rawProcessor.imgdata.other.focal_len, 'f', 1) : QString("Unknown")),
+        QString("%1: %2 %3").arg(uiText("Camera", "相机"), safeLatin1(rawProcessor.imgdata.idata.make), safeLatin1(rawProcessor.imgdata.idata.model)),
+        QString("%1: %2").arg(uiText("Lens", "镜头"), safeLatin1(rawProcessor.imgdata.lens.Lens)),
+        QString("%1: %2").arg(uiText("ISO", "ISO"), rawProcessor.imgdata.other.iso_speed > 0.0f ? QString::number(rawProcessor.imgdata.other.iso_speed, 'f', 0) : decodeUnknownText()),
+        QString("%1: %2").arg(uiText("Shutter", "快门"), rawProcessor.imgdata.other.shutter > 0.0f ? QString::number(rawProcessor.imgdata.other.shutter, 'f', 4) : decodeUnknownText()),
+        QString("%1: %2").arg(uiText("Aperture", "光圈"), rawProcessor.imgdata.other.aperture > 0.0f ? QString::number(rawProcessor.imgdata.other.aperture, 'f', 1) : decodeUnknownText()),
+        QString("%1: %2").arg(uiText("Focal length", "焦距"), rawProcessor.imgdata.other.focal_len > 0.0f ? QString::number(rawProcessor.imgdata.other.focal_len, 'f', 1) : decodeUnknownText()),
     };
     if (rawProcessor.imgdata.other.timestamp > 0) {
-        result.metadataLines << QString("Capture time: %1")
+        result.metadataLines << QString("%1: %2")
+                                    .arg(uiText("Capture time", "拍摄时间"))
                                     .arg(QDateTime::fromSecsSinceEpoch(
                                              static_cast<qint64>(rawProcessor.imgdata.other.timestamp),
                                              Qt::LocalTime)
                                              .toString("yyyy-MM-dd HH:mm:ss"));
     }
     if (rawProcessor.imgdata.other.shot_order > 0) {
-        result.metadataLines << QString("Shot order: %1").arg(rawProcessor.imgdata.other.shot_order);
+        result.metadataLines << QString("%1: %2").arg(uiText("Shot order", "拍摄序号")).arg(rawProcessor.imgdata.other.shot_order);
     }
     const QString description = safeLatin1(rawProcessor.imgdata.other.desc);
     if (!description.isEmpty()) {
-        result.metadataLines << QString("Description: %1").arg(description);
+        result.metadataLines << QString("%1: %2").arg(uiText("Description", "说明"), description);
     }
     const QString artist = safeLatin1(rawProcessor.imgdata.other.artist);
     if (!artist.isEmpty()) {
-        result.metadataLines << QString("Artist: %1").arg(artist);
+        result.metadataLines << QString("%1: %2").arg(uiText("Artist", "作者"), artist);
     }
     if (rawProcessor.imgdata.other.parsed_gps.gpsparsed) {
         const auto& gps = rawProcessor.imgdata.other.parsed_gps;
@@ -319,9 +542,9 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
             * ((gps.latref == 'S') ? -1.0 : 1.0);
         const double longitude = (qAbs(gps.longitude[0]) + (gps.longitude[1] / 60.0) + (gps.longitude[2] / 3600.0))
             * ((gps.longref == 'W') ? -1.0 : 1.0);
-        result.metadataLines << QString("GPS latitude: %1").arg(QString::number(latitude, 'f', 6));
-        result.metadataLines << QString("GPS longitude: %1").arg(QString::number(longitude, 'f', 6));
-        result.metadataLines << QString("GPS altitude: %1 m").arg(QString::number(gps.altitude, 'f', 1));
+        result.metadataLines << QString("%1: %2").arg(uiText("GPS latitude", "GPS 纬度"), QString::number(latitude, 'f', 6));
+        result.metadataLines << QString("%1: %2").arg(uiText("GPS longitude", "GPS 经度"), QString::number(longitude, 'f', 6));
+        result.metadataLines << QString("%1: %2 m").arg(uiText("GPS altitude", "GPS 海拔"), QString::number(gps.altitude, 'f', 1));
     }
 
     libraw_processed_image_t* previewImage = nullptr;
@@ -373,7 +596,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     const int unpackResult = rawProcessor.unpack();
     if (unpackResult != LIBRAW_SUCCESS) {
         recycle();
-        return makeError(path, "LibRaw", QString::fromLatin1(libraw_strerror(unpackResult)));
+        return makeError(path, "LibRaw", translateLibRawError(unpackResult, QString::fromLatin1(libraw_strerror(unpackResult))));
     }
 
     // Keep the full RAW output visually consistent with the embedded preview.
@@ -388,13 +611,13 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     const int processResult = rawProcessor.dcraw_process();
     if (processResult != LIBRAW_SUCCESS) {
         recycle();
-        return makeError(path, "LibRaw", QString::fromLatin1(libraw_strerror(processResult)));
+        return makeError(path, "LibRaw", translateLibRawError(processResult, QString::fromLatin1(libraw_strerror(processResult))));
     }
 
     libraw_processed_image_t* processedImage = rawProcessor.dcraw_make_mem_image();
     if (!processedImage) {
         recycle();
-        return makeError(path, "LibRaw", "Failed to produce processed RAW image.");
+        return makeError(path, "LibRaw", uiText("Failed to produce processed RAW image.", "无法生成处理后的 RAW 图像。"));
     }
 
     if (processedImage->type == LIBRAW_IMAGE_BITMAP) {
@@ -422,14 +645,14 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     } else {
         LibRaw::dcraw_clear_mem(processedImage);
         recycle();
-        return makeError(path, "LibRaw", "Unsupported processed RAW output type.");
+        return makeError(path, "LibRaw", uiText("Unsupported processed RAW output type.", "不支持的 RAW 输出类型。"));
     }
 
     LibRaw::dcraw_clear_mem(processedImage);
     recycle();
 
     if (result.image.isNull()) {
-        return makeError(path, "LibRaw", "Failed to convert RAW output into QImage.");
+        return makeError(path, "LibRaw", uiText("Failed to convert RAW output into QImage.", "无法将 RAW 输出转换为 QImage。"));
     }
 
     return result;
@@ -462,7 +685,7 @@ DecodedImage ImageDecoder::decode(const QString& path, DecodeMode mode)
         break;
     case ImageFormatKind::Unknown:
     default:
-        return makeError(path, "unknown", "Unsupported image format.");
+        return makeError(path, "unknown", uiText("Unsupported image format.", "不支持的图片格式。"));
     }
 
     if (!decoded.isValid() && kind != ImageFormatKind::Arw) {

@@ -1,5 +1,7 @@
 #include "viewer/image_viewer_widget.h"
 
+#include "app/app_language.h"
+
 #include <algorithm>
 
 #include <QLabel>
@@ -7,6 +9,8 @@
 #include <QPainter>
 #include <QShowEvent>
 #include <QWheelEvent>
+
+using AppI18n::uiText;
 
 ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     : QWidget(parent)
@@ -23,7 +27,7 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     layout->setSpacing(12);
     layout->setAlignment(Qt::AlignCenter);
 
-    emptyTitleLabel_ = new QLabel("Open a file or folder", emptyStateContainer_);
+    emptyTitleLabel_ = new QLabel(emptyTitleText_ = uiText("Open a file or folder", "打开文件或文件夹"), emptyStateContainer_);
     QFont titleFont = emptyTitleLabel_->font();
     titleFont.setPointSize(titleFont.pointSize() + 4);
     titleFont.setBold(true);
@@ -32,13 +36,15 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     emptyTitleLabel_->setStyleSheet("color: #f2f2f2;");
     layout->addWidget(emptyTitleLabel_, 0, Qt::AlignHCenter);
 
-    emptyDetailLabel_ = new QLabel("Supported: common image, HEIF/AVIF, and RAW formats", emptyStateContainer_);
+    emptyDetailLabel_ = new QLabel(
+        emptyDetailText_ = uiText("Supported: common image, HEIF/AVIF, and RAW formats", "支持常见图片、HEIF/AVIF 和 RAW 格式"),
+        emptyStateContainer_);
     emptyDetailLabel_->setAlignment(Qt::AlignCenter);
     emptyDetailLabel_->setStyleSheet("color: #d0d0d0;");
     layout->addWidget(emptyDetailLabel_, 0, Qt::AlignHCenter);
 
-    openFileButton_ = new QPushButton("Open File...", emptyStateContainer_);
-    openFolderButton_ = new QPushButton("Open Folder...", emptyStateContainer_);
+    openFileButton_ = new QPushButton(uiText("Open File...", "打开文件..."), emptyStateContainer_);
+    openFolderButton_ = new QPushButton(uiText("Open Folder...", "打开文件夹..."), emptyStateContainer_);
     openFileButton_->setMinimumWidth(180);
     openFolderButton_->setMinimumWidth(180);
     openFileButton_->setStyleSheet(
@@ -58,7 +64,7 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     loadingLayout->setSpacing(8);
     loadingLayout->setAlignment(Qt::AlignCenter);
 
-    loadingTitleLabel_ = new QLabel("Loading image...", loadingStateContainer_);
+    loadingTitleLabel_ = new QLabel(loadingTitleText_ = uiText("Loading image...", "正在加载图片..."), loadingStateContainer_);
     QFont loadingTitleFont = loadingTitleLabel_->font();
     loadingTitleFont.setPointSize(loadingTitleFont.pointSize() + 4);
     loadingTitleFont.setBold(true);
@@ -67,7 +73,9 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     loadingTitleLabel_->setStyleSheet("color: #f2f2f2;");
     loadingLayout->addWidget(loadingTitleLabel_, 0, Qt::AlignHCenter);
 
-    loadingDetailLabel_ = new QLabel("Preparing preview and full-quality render...", loadingStateContainer_);
+    loadingDetailLabel_ = new QLabel(
+        loadingDetailText_ = uiText("Preparing preview and full-quality render...", "正在准备预览和高质量渲染..."),
+        loadingStateContainer_);
     loadingDetailLabel_->setAlignment(Qt::AlignCenter);
     loadingDetailLabel_->setStyleSheet("color: #d0d0d0;");
     loadingLayout->addWidget(loadingDetailLabel_, 0, Qt::AlignHCenter);
@@ -95,7 +103,7 @@ ImageViewerWidget::ImageViewerWidget(QWidget* parent)
     connect(transientHudTimer_, &QTimer::timeout, this, &ImageViewerWidget::hideTransientHud);
 
     setOverlayState(OverlayState::Empty);
-    setMessage("Open a file or folder", "Supported: JPG, JPEG, HEIF, HEIC, HIF, ARW");
+    setMessage(uiText("Open a file or folder", "打开文件或文件夹"), uiText("Supported: JPG, JPEG, HEIF, HEIC, HIF, ARW", "支持：JPG、JPEG、HEIF、HEIC、HIF、ARW"));
 }
 
 void ImageViewerWidget::setImage(const QImage& image)
@@ -115,8 +123,12 @@ void ImageViewerWidget::setMessage(const QString& title, const QString& detail)
     resetViewTransform();
     hideTransientHud();
     setOverlayState(OverlayState::Empty);
-    emptyTitleLabel_->setText(title.isEmpty() ? "Open a file or folder" : title);
-    emptyDetailLabel_->setText(detail.isEmpty() ? "Supported: common image, HEIF/AVIF, and RAW formats" : detail);
+    emptyTitleCustom_ = !title.isEmpty();
+    emptyDetailCustom_ = !detail.isEmpty();
+    emptyTitleText_ = emptyTitleCustom_ ? title : uiText("Open a file or folder", "打开文件或文件夹");
+    emptyDetailText_ = emptyDetailCustom_ ? detail : uiText("Supported: common image, HEIF/AVIF, and RAW formats", "支持常见图片、HEIF/AVIF 和 RAW 格式");
+    emptyTitleLabel_->setText(emptyTitleText_);
+    emptyDetailLabel_->setText(emptyDetailText_);
     updateEmptyStateUi();
     updateLoadingStateUi();
     updateTransientHudUi();
@@ -129,12 +141,47 @@ void ImageViewerWidget::setLoading(const QString& title, const QString& detail)
     resetViewTransform();
     hideTransientHud();
     setOverlayState(OverlayState::Loading);
-    loadingTitleLabel_->setText(title.isEmpty() ? "Loading image..." : title);
-    loadingDetailLabel_->setText(detail.isEmpty() ? "Preparing preview and full-quality render..." : detail);
+    loadingTitleCustom_ = !title.isEmpty();
+    loadingDetailCustom_ = !detail.isEmpty();
+    loadingTitleText_ = loadingTitleCustom_ ? title : uiText("Loading image...", "正在加载图片...");
+    loadingDetailText_ = loadingDetailCustom_ ? detail : uiText("Preparing preview and full-quality render...", "正在准备预览和高质量渲染...");
+    loadingTitleLabel_->setText(loadingTitleText_);
+    loadingDetailLabel_->setText(loadingDetailText_);
     updateLoadingStateUi();
     updateEmptyStateUi();
     updateTransientHudUi();
     update();
+}
+
+void ImageViewerWidget::retranslateUi()
+{
+    if (!emptyTitleCustom_) {
+        emptyTitleText_ = uiText("Open a file or folder", "打开文件或文件夹");
+    }
+    if (!emptyDetailCustom_) {
+        emptyDetailText_ = uiText("Supported: common image, HEIF/AVIF, and RAW formats", "支持常见图片、HEIF/AVIF 和 RAW 格式");
+    }
+    if (!loadingTitleCustom_) {
+        loadingTitleText_ = uiText("Loading image...", "正在加载图片...");
+    }
+    if (!loadingDetailCustom_) {
+        loadingDetailText_ = uiText("Preparing preview and full-quality render...", "正在准备预览和高质量渲染...");
+    }
+
+    if (overlayState_ == OverlayState::Empty) {
+        emptyTitleLabel_->setText(emptyTitleText_);
+        emptyDetailLabel_->setText(emptyDetailText_);
+    } else if (overlayState_ == OverlayState::Loading) {
+        loadingTitleLabel_->setText(loadingTitleText_);
+        loadingDetailLabel_->setText(loadingDetailText_);
+    }
+
+    if (openFileButton_) {
+        openFileButton_->setText(uiText("Open File...", "打开文件..."));
+    }
+    if (openFolderButton_) {
+        openFolderButton_->setText(uiText("Open Folder...", "打开文件夹..."));
+    }
 }
 
 void ImageViewerWidget::showTransientZoom(const QString& text)

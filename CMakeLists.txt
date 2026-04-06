@@ -38,6 +38,7 @@ endif()
 set(PIC_VIEWER_SOURCES
     assets/app_icon.rc
     assets/resources.qrc
+    src/app/app_language.cpp
     src/app/main.cpp
     src/app/main_window.cpp
     src/catalog/image_catalog.cpp
@@ -50,6 +51,7 @@ set(PIC_VIEWER_SOURCES
 
 set(PIC_VIEWER_HEADERS
     src/app/main_window.h
+    src/app/app_language.h
     src/catalog/image_catalog.h
     src/core/image_cache.h
     src/core/image_types.h

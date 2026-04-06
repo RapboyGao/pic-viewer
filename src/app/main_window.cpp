@@ -1,5 +1,6 @@
 #include "app/main_window.h"
 
+#include "app/app_language.h"
 #include "core/slide_show_controller.h"
 #include "decoder/image_decoder.h"
 #include "viewer/image_viewer_widget.h"
@@ -45,6 +46,8 @@
 #include <shlobj.h>
 #endif
 
+using AppI18n::uiText;
+
 namespace {
 
 constexpr int kDefaultIntervalMs = 3000;
@@ -64,7 +67,7 @@ constexpr qint64 kImageCacheBudgetBytes = 256LL * 1024 * 1024;
 
 QString modeLabelForAction(int intervalMs)
 {
-    return QString("%1 s").arg(intervalMs / 1000);
+    return uiText("%1 s", "%1 秒").arg(intervalMs / 1000);
 }
 
 qint64 estimatePixmapCost(const QPixmap& pixmap)
@@ -94,7 +97,7 @@ QString formatBytes(qint64 bytes)
 QString formatDateTime(const QDateTime& dateTime)
 {
     if (!dateTime.isValid()) {
-        return "Unknown";
+        return uiText("Unknown", "未知");
     }
     return dateTime.toString("yyyy-MM-dd HH:mm:ss");
 }
@@ -102,49 +105,99 @@ QString formatDateTime(const QDateTime& dateTime)
 QString formatColorSpace(const QColorSpace& colorSpace)
 {
     if (!colorSpace.isValid()) {
-        return "Unknown";
+        return uiText("Unknown", "未知");
     }
 
     const QString description = colorSpace.description();
-    return description.isEmpty() ? QString("Valid color space") : description;
+    return description.isEmpty() ? uiText("Valid color space", "有效色彩空间") : description;
 }
 
 QString formatImageFormat(QImage::Format format)
 {
     switch (format) {
     case QImage::Format_Invalid:
-        return "Invalid";
+        return uiText("Invalid", "无效");
     case QImage::Format_Mono:
-        return "Mono";
+        return uiText("Mono", "1 位单色");
     case QImage::Format_MonoLSB:
-        return "Mono LSB";
+        return uiText("Mono LSB", "1 位单色（LSB 优先）");
     case QImage::Format_Indexed8:
-        return "Indexed8";
+        return uiText("Indexed8", "索引色 8 位（调色板）");
     case QImage::Format_RGB32:
-        return "RGB32";
+        return uiText("RGB32", "XRGB 32 位");
     case QImage::Format_ARGB32:
-        return "ARGB32";
+        return uiText("ARGB32", "ARGB 32 位（8-8-8-8）");
     case QImage::Format_ARGB32_Premultiplied:
-        return "ARGB32 Premultiplied";
+        return uiText("ARGB32 Premultiplied", "ARGB 32 位（预乘 alpha）");
+    case QImage::Format_RGB16:
+        return uiText("RGB16", "RGB 16 位（5-6-5）");
+    case QImage::Format_ARGB8565_Premultiplied:
+        return uiText("ARGB8565 Premultiplied", "ARGB 8-5-6-5（预乘 alpha）");
+    case QImage::Format_RGB666:
+        return uiText("RGB666", "RGB 18 位（6-6-6）");
+    case QImage::Format_ARGB6666_Premultiplied:
+        return uiText("ARGB6666 Premultiplied", "ARGB 24 位（6-6-6-6，预乘 alpha）");
+    case QImage::Format_RGB555:
+        return uiText("RGB555", "RGB 15 位（5-5-5）");
+    case QImage::Format_ARGB8555_Premultiplied:
+        return uiText("ARGB8555 Premultiplied", "ARGB 20 位（8-5-5-5，预乘 alpha）");
     case QImage::Format_RGB888:
-        return "RGB888";
+        return uiText("RGB888", "RGB 24 位（8-8-8）");
+    case QImage::Format_RGB444:
+        return uiText("RGB444", "RGB 12 位（4-4-4）");
+    case QImage::Format_ARGB4444_Premultiplied:
+        return uiText("ARGB4444 Premultiplied", "ARGB 16 位（4-4-4-4，预乘 alpha）");
+    case QImage::Format_BGR888:
+        return uiText("BGR888", "BGR 24 位（8-8-8）");
     case QImage::Format_RGBA8888:
-        return "RGBA8888";
+        return uiText("RGBA8888", "RGBA 32 位（8-8-8-8）");
     case QImage::Format_RGBA8888_Premultiplied:
-        return "RGBA8888 Premultiplied";
+        return uiText("RGBA8888 Premultiplied", "RGBA 32 位（预乘 alpha）");
     case QImage::Format_RGBX8888:
-        return "RGBX8888";
+        return uiText("RGBX8888", "RGBX 32 位（无 alpha）");
     case QImage::Format_Grayscale8:
-        return "Grayscale8";
+        return uiText("Grayscale8", "灰度 8 位（单通道）");
+    case QImage::Format_Alpha8:
+        return uiText("Alpha8", "Alpha 8 位（遮罩）");
+    case QImage::Format_Grayscale16:
+        return uiText("Grayscale16", "灰度 16 位（单通道）");
+    case QImage::Format_RGBX64:
+        return uiText("RGBX64", "RGBX 64 位（16-16-16-16）");
+    case QImage::Format_RGBA64:
+        return uiText("RGBA64", "RGBA 64 位（16-16-16-16）");
+    case QImage::Format_RGBA64_Premultiplied:
+        return uiText("RGBA64 Premultiplied", "RGBA 64 位（预乘 alpha）");
+    case QImage::Format_BGR30:
+        return uiText("BGR30", "BGR 30 位（10-10-10）");
+    case QImage::Format_A2BGR30_Premultiplied:
+        return uiText("A2BGR30 Premultiplied", "A2BGR 30 位（10-10-10，预乘 alpha）");
+    case QImage::Format_RGB30:
+        return uiText("RGB30", "RGB 30 位（10-10-10）");
+    case QImage::Format_A2RGB30_Premultiplied:
+        return uiText("A2RGB30 Premultiplied", "A2RGB 30 位（10-10-10，预乘 alpha）");
+    case QImage::Format_CMYK8888:
+        return uiText("CMYK8888", "CMYK 32 位（8-8-8-8）");
+    case QImage::Format_RGBX16FPx4:
+        return uiText("RGBX16FPx4", "RGBX 16 位半精度浮点");
+    case QImage::Format_RGBA16FPx4:
+        return uiText("RGBA16FPx4", "RGBA 16 位半精度浮点");
+    case QImage::Format_RGBA16FPx4_Premultiplied:
+        return uiText("RGBA16FPx4 Premultiplied", "RGBA 16 位半精度浮点（预乘 alpha）");
+    case QImage::Format_RGBX32FPx4:
+        return uiText("RGBX32FPx4", "RGBX 32 位单精度浮点");
+    case QImage::Format_RGBA32FPx4:
+        return uiText("RGBA32FPx4", "RGBA 32 位单精度浮点");
+    case QImage::Format_RGBA32FPx4_Premultiplied:
+        return uiText("RGBA32FPx4 Premultiplied", "RGBA 32 位单精度浮点（预乘 alpha）");
     default:
-        return QString("Format %1").arg(static_cast<int>(format));
+        return uiText("Format %1", "格式 %1").arg(static_cast<int>(format));
     }
 }
 
 QString formatAspectRatio(const QSize& size)
 {
     if (!size.isValid() || size.height() <= 0) {
-        return "Unknown";
+        return uiText("Unknown", "未知");
     }
 
     return QString("%1:1").arg(QString::number(static_cast<double>(size.width()) / size.height(), 'f', 2));
@@ -153,7 +206,7 @@ QString formatAspectRatio(const QSize& size)
 QString formatPixels(const QSize& size)
 {
     if (!size.isValid()) {
-        return "Unknown";
+        return uiText("Unknown", "未知");
     }
 
     const qint64 pixels = static_cast<qint64>(size.width()) * static_cast<qint64>(size.height());
@@ -163,15 +216,77 @@ QString formatPixels(const QSize& size)
 QString formatDpi(double dotsPerMeter)
 {
     if (dotsPerMeter <= 0.0) {
-        return "Unknown";
+        return uiText("Unknown", "未知");
     }
 
     return QString::number(dotsPerMeter / 39.37007874, 'f', 1);
 }
 
+QString translateMetadataLabel(const QString& label)
+{
+    const QString normalized = label.trimmed().toLower();
+    if (normalized == "camera") {
+        return uiText("Camera", "相机");
+    }
+    if (normalized == "lens") {
+        return uiText("Lens", "镜头");
+    }
+    if (normalized == "iso") {
+        return uiText("ISO", "ISO");
+    }
+    if (normalized == "shutter") {
+        return uiText("Shutter", "快门");
+    }
+    if (normalized == "aperture") {
+        return uiText("Aperture", "光圈");
+    }
+    if (normalized == "focal length") {
+        return uiText("Focal length", "焦距");
+    }
+    if (normalized == "capture time") {
+        return uiText("Capture time", "拍摄时间");
+    }
+    if (normalized == "shot order") {
+        return uiText("Shot order", "拍摄序号");
+    }
+    if (normalized == "description") {
+        return uiText("Description", "说明");
+    }
+    if (normalized == "artist") {
+        return uiText("Artist", "作者");
+    }
+    if (normalized == "gps latitude") {
+        return uiText("GPS latitude", "GPS 纬度");
+    }
+    if (normalized == "gps longitude") {
+        return uiText("GPS longitude", "GPS 经度");
+    }
+    if (normalized == "gps altitude") {
+        return uiText("GPS altitude", "GPS 海拔");
+    }
+    return label;
+}
+
+QString translateMetadataLine(const QString& line)
+{
+    const int separatorIndex = line.indexOf(':');
+    if (separatorIndex <= 0) {
+        return line;
+    }
+
+    const QString label = line.left(separatorIndex).trimmed();
+    const QString value = line.mid(separatorIndex + 1).trimmed();
+    const QString translatedLabel = translateMetadataLabel(label);
+    if (translatedLabel == label) {
+        return line;
+    }
+    return QString("%1: %2").arg(translatedLabel, value);
+}
+
 struct FileAssociationGroup
 {
-    QString title;
+    QString englishTitle;
+    QString chineseTitle;
     QStringList extensions;
 };
 
@@ -185,26 +300,26 @@ QStringList normalizedExtensions(QStringList extensions)
 QList<FileAssociationGroup> commonAssociationGroups()
 {
     return {
-        {"JPEG / HEIF", {"jpg", "jpeg", "jpe", "jfif", "heic", "heif", "hif", "avif", "avifs"}},
-        {"PNG / GIF", {"png", "apng", "gif"}},
-        {"Web / Modern", {"webp", "jxl", "jp2", "jxr"}},
-        {"Bitmap / Legacy", {"bmp", "dib", "ico", "icon", "pbm", "pfm", "pgm", "pic", "pnm", "ppm", "qoi", "ras", "sr", "tga"}},
-        {"Editor / Print", {"psd", "exr", "hdr", "svg", "tif", "tiff"}},
+        {"JPEG / HEIF", "JPEG / HEIF", {"jpg", "jpeg", "jpe", "jfif", "heic", "heif", "hif", "avif", "avifs"}},
+        {"PNG / GIF", "PNG / GIF", {"png", "apng", "gif"}},
+        {"Web / Modern", "Web / 现代", {"webp", "jxl", "jp2", "jxr"}},
+        {"Bitmap / Legacy", "位图 / 传统", {"bmp", "dib", "ico", "icon", "pbm", "pfm", "pgm", "pic", "pnm", "ppm", "qoi", "ras", "sr", "tga"}},
+        {"Editor / Print", "编辑 / 打印", {"psd", "exr", "hdr", "svg", "tif", "tiff"}},
     };
 }
 
 QList<FileAssociationGroup> rawAssociationGroups()
 {
     return {
-        {"Sony RAW", {"arw", "sr2", "srf"}},
-        {"Canon RAW", {"cr2", "cr3", "crw"}},
-        {"Nikon RAW", {"nef", "nrw"}},
-        {"Fujifilm RAW", {"raf"}},
-        {"Panasonic RAW", {"rw2"}},
-        {"Olympus / OM RAW", {"orf"}},
-        {"Pentax RAW", {"pef"}},
-        {"Leica / DNG", {"dng"}},
-        {"Other RAW", {"3fr", "ari", "bay", "cap", "dcr", "dcs", "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos", "mrw", "ptx", "r3d", "raw", "rwl", "rwz", "srw", "x3f"}},
+        {"Sony RAW", "索尼 RAW", {"arw", "sr2", "srf"}},
+        {"Canon RAW", "佳能 RAW", {"cr2", "cr3", "crw"}},
+        {"Nikon RAW", "尼康 RAW", {"nef", "nrw"}},
+        {"Fujifilm RAW", "富士 RAW", {"raf"}},
+        {"Panasonic RAW", "松下 RAW", {"rw2"}},
+        {"Olympus / OM RAW", "奥林巴斯 / OM RAW", {"orf"}},
+        {"Pentax RAW", "宾得 RAW", {"pef"}},
+        {"Leica / DNG", "徕卡 / DNG", {"dng"}},
+        {"Other RAW", "其他 RAW", {"3fr", "ari", "bay", "cap", "dcr", "dcs", "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos", "mrw", "ptx", "r3d", "raw", "rwl", "rwz", "srw", "x3f"}},
     };
 }
 
@@ -250,7 +365,7 @@ QString windowsErrorMessage(DWORD errorCode)
     const DWORD size = FormatMessageW(flags, nullptr, errorCode, 0, reinterpret_cast<LPWSTR>(&buffer), 0, nullptr);
     QString message = size > 0 && buffer
         ? QString::fromWCharArray(buffer).trimmed()
-        : QStringLiteral("Windows error %1").arg(errorCode);
+        : uiText("Windows error %1", "Windows 错误 %1").arg(errorCode);
     if (buffer) {
         LocalFree(buffer);
     }
@@ -278,7 +393,7 @@ bool setRegistryDefaultString(HKEY root, const QString& path, const QString& val
     HKEY key = nullptr;
     if (!openRegistryKey(root, path, KEY_SET_VALUE, &key)) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("Unable to open registry key: %1").arg(path);
+            *errorMessage = uiText("Unable to open registry key: %1", "无法打开注册表项：%1").arg(path);
         }
         return false;
     }
@@ -294,7 +409,7 @@ bool setRegistryDefaultString(HKEY root, const QString& path, const QString& val
     RegCloseKey(key);
     if (status != ERROR_SUCCESS) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("Unable to write registry value: %1").arg(windowsErrorMessage(status));
+            *errorMessage = uiText("Unable to write registry value: %1", "无法写入注册表值：%1").arg(windowsErrorMessage(status));
         }
         return false;
     }
@@ -345,7 +460,7 @@ bool deleteRegistryTreeIfExists(HKEY root, const QString& path, QString* errorMe
     }
     if (status != ERROR_SUCCESS) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("Unable to delete registry key: %1").arg(windowsErrorMessage(status));
+            *errorMessage = uiText("Unable to delete registry key: %1", "无法删除注册表项：%1").arg(windowsErrorMessage(status));
         }
         return false;
     }
@@ -367,7 +482,7 @@ bool deleteRegistryDefaultValue(HKEY root, const QString& path, QString* errorMe
     }
     if (status != ERROR_SUCCESS) {
         if (errorMessage) {
-            *errorMessage = QStringLiteral("Unable to clear registry value: %1").arg(windowsErrorMessage(status));
+            *errorMessage = uiText("Unable to clear registry value: %1", "无法清除注册表值：%1").arg(windowsErrorMessage(status));
         }
         return false;
     }
@@ -439,7 +554,12 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
 
     connect(slideshow_, &SlideShowController::advanceRequested, this, &MainWindow::showNextImage);
     connect(slideshow_, &SlideShowController::playingChanged, this, [this](bool playing) {
-        playPauseAction_->setText(playing ? "Pause Slideshow" : "Start Slideshow");
+        if (playPauseAction_) {
+            playPauseAction_->setText(playing ? uiText("Pause Slideshow", "暂停幻灯片放映") : uiText("Start Slideshow", "开始幻灯片放映"));
+        }
+    });
+    connect(slideshow_, &SlideShowController::intervalChanged, this, [this](int intervalMs) {
+        setIntervalActionChecked(intervalMs);
     });
     connect(thumbnailList_, &QListWidget::itemActivated, this, &MainWindow::thumbnailActivated);
     connect(thumbnailList_, &QListWidget::itemClicked, this, &MainWindow::thumbnailActivated);
@@ -447,7 +567,7 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     connect(viewer_, &ImageViewerWidget::openFolderRequested, this, &MainWindow::openFolder);
     connect(viewer_, &ImageViewerWidget::zoomFactorChanged, this, [this](double zoomFactor) {
         if (viewer_ && viewer_->hasImage()) {
-            viewer_->showTransientZoom(QString("Zoom %1%").arg(static_cast<int>(zoomFactor * 100.0)));
+            viewer_->showTransientZoom(uiText("Zoom %1%", "缩放 %1%").arg(static_cast<int>(zoomFactor * 100.0)));
         }
     });
     connect(thumbnailList_->horizontalScrollBar(), &QScrollBar::valueChanged, this, [this]() {
@@ -474,7 +594,9 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     if (!startupPath.isEmpty()) {
         openPath(startupPath);
     } else {
-        viewer_->setMessage("Open a file or folder", "Supported: common image, HEIF/AVIF, and RAW formats");
+        viewer_->setMessage(
+            uiText("Open a file or folder", "打开文件或文件夹"),
+            uiText("Supported: common image, HEIF/AVIF, and RAW formats", "支持常见图片、HEIF/AVIF 和 RAW 格式"));
     }
 }
 
@@ -530,11 +652,14 @@ void MainWindow::keyPressEvent(QKeyEvent* event)
 
 void MainWindow::openFile()
 {
+    const QString filter = uiText(
+        "Images (*.apng *.avif *.avifs *.bmp *.dib *.exr *.gif *.hdr *.heic *.heif *.hif *.ico *.icon *.jfif *.jp2 *.jpe *.jpeg *.jpg *.jxl *.jxr *.pbm *.pfm *.pgm *.pic *.png *.pnm *.ppm *.psd *.pxm *.qoi *.ras *.sr *.svg *.tga *.tif *.tiff *.webp *.wp2 *.3fr *.ari *.arw *.bay *.cap *.cr2 *.cr3 *.crw *.dcr *.dcs *.dng *.drf *.eip *.erf *.fff *.gpr *.iiq *.k25 *.kdc *.mdc *.mef *.mos *.mrw *.nef *.nrw *.orf *.pef *.ptx *.r3d *.raf *.raw *.rw2 *.rwl *.rwz *.sr2 *.srf *.srw *.x3f)",
+        "图片 (*.apng *.avif *.avifs *.bmp *.dib *.exr *.gif *.hdr *.heic *.heif *.hif *.ico *.icon *.jfif *.jp2 *.jpe *.jpeg *.jpg *.jxl *.jxr *.pbm *.pfm *.pgm *.pic *.png *.pnm *.ppm *.psd *.pxm *.qoi *.ras *.sr *.svg *.tga *.tif *.tiff *.webp *.wp2 *.3fr *.ari *.arw *.bay *.cap *.cr2 *.cr3 *.crw *.dcr *.dcs *.dng *.drf *.eip *.erf *.fff *.gpr *.iiq *.k25 *.kdc *.mdc *.mef *.mos *.mrw *.nef *.nrw *.orf *.pef *.ptx *.r3d *.raf *.raw *.rw2 *.rwl *.rwz *.sr2 *.srf *.srw *.x3f)");
     const QString path = QFileDialog::getOpenFileName(
         this,
-        "Open Image",
+        uiText("Open Image", "打开图片"),
         {},
-        "Images (*.apng *.avif *.avifs *.bmp *.dib *.exr *.gif *.hdr *.heic *.heif *.hif *.ico *.icon *.jfif *.jp2 *.jpe *.jpeg *.jpg *.jxl *.jxr *.pbm *.pfm *.pgm *.pic *.png *.pnm *.ppm *.psd *.pxm *.qoi *.ras *.sr *.svg *.tga *.tif *.tiff *.webp *.wp2 *.3fr *.ari *.arw *.bay *.cap *.cr2 *.cr3 *.crw *.dcr *.dcs *.dng *.drf *.eip *.erf *.fff *.gpr *.iiq *.k25 *.kdc *.mdc *.mef *.mos *.mrw *.nef *.nrw *.orf *.pef *.ptx *.r3d *.raf *.raw *.rw2 *.rwl *.rwz *.sr2 *.srf *.srw *.x3f)");
+        filter);
     if (!path.isEmpty()) {
         openPath(path);
     }
@@ -542,7 +667,7 @@ void MainWindow::openFile()
 
 void MainWindow::openFolder()
 {
-    const QString path = QFileDialog::getExistingDirectory(this, "Open Folder");
+    const QString path = QFileDialog::getExistingDirectory(this, uiText("Open Folder", "打开文件夹"));
     if (!path.isEmpty()) {
         openPath(path);
     }
@@ -573,26 +698,28 @@ void MainWindow::toggleSlideshow()
 
 void MainWindow::createMenus()
 {
-    QMenu* fileMenu = menuBar()->addMenu("&File");
-    fileMenu->addAction("&Open File...", QKeySequence::Open, this, &MainWindow::openFile);
-    fileMenu->addAction("Open &Folder...", this, &MainWindow::openFolder);
-    fileMenu->addSeparator();
-    createFileAssociationMenu(fileMenu);
-    fileMenu->addSeparator();
-    fileMenu->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
+    fileMenu_ = menuBar()->addMenu(uiText("&File", "&文件"));
+    openFileAction_ = fileMenu_->addAction(uiText("&Open File...", "&打开文件..."), QKeySequence::Open, this, &MainWindow::openFile);
+    openFolderAction_ = fileMenu_->addAction(uiText("Open &Folder...", "打开&文件夹..."), this, &MainWindow::openFolder);
+    fileMenu_->addSeparator();
+    createFileAssociationMenu(fileMenu_);
+    fileMenu_->addSeparator();
+    exitAction_ = fileMenu_->addAction(uiText("E&xit", "退&出"), QKeySequence::Quit, this, &QWidget::close);
 
-    QMenu* playbackMenu = menuBar()->addMenu("&Playback");
-    playPauseAction_ = playbackMenu->addAction("Start Slideshow", Qt::Key_Space, this, &MainWindow::toggleSlideshow);
-    playbackMenu->addSeparator();
+    playbackMenu_ = menuBar()->addMenu(uiText("&Playback", "&播放"));
+    playPauseAction_ = playbackMenu_->addAction(uiText("Start Slideshow", "开始幻灯片放映"), Qt::Key_Space, this, &MainWindow::toggleSlideshow);
+    playbackMenu_->addSeparator();
 
     intervalActionGroup_ = new QActionGroup(this);
     intervalActionGroup_->setExclusive(true);
+    intervalActions_.clear();
 
     for (const int interval : {1000, 3000, 5000, 10000}) {
-        QAction* action = playbackMenu->addAction(modeLabelForAction(interval));
+        QAction* action = playbackMenu_->addAction(modeLabelForAction(interval));
         action->setCheckable(true);
         action->setData(interval);
         intervalActionGroup_->addAction(action);
+        intervalActions_.append(action);
         connect(action, &QAction::triggered, this, [this, interval]() {
             slideshow_->setIntervalMs(interval);
             setIntervalActionChecked(interval);
@@ -600,53 +727,89 @@ void MainWindow::createMenus()
     }
     setIntervalActionChecked(kDefaultIntervalMs);
 
-    QMenu* viewMenu = menuBar()->addMenu("&View");
-    fullscreenAction_ = viewMenu->addAction("Toggle Fullscreen", Qt::Key_F11, this, &MainWindow::toggleFullscreen);
-    infoPanelAction_ = viewMenu->addAction("Toggle Info Panel", Qt::Key_I, this, &MainWindow::toggleInfoPanel);
+    viewMenu_ = menuBar()->addMenu(uiText("&View", "&视图"));
+    fullscreenAction_ = viewMenu_->addAction(uiText("Enter Fullscreen", "进入全屏"), Qt::Key_F11, this, &MainWindow::toggleFullscreen);
+    infoPanelAction_ = viewMenu_->addAction(uiText("Show Info Panel", "显示信息面板"), Qt::Key_I, this, &MainWindow::toggleInfoPanel);
     infoPanelAction_->setCheckable(true);
-    viewMenu->addAction("Zoom In", QKeySequence::ZoomIn, this, &MainWindow::zoomIn);
-    viewMenu->addAction("Zoom Out", QKeySequence::ZoomOut, this, &MainWindow::zoomOut);
-    viewMenu->addAction("Reset Zoom", QKeySequence(Qt::CTRL | Qt::Key_0), this, &MainWindow::resetZoom);
-    viewMenu->addSeparator();
+    zoomInAction_ = viewMenu_->addAction(uiText("Zoom In", "放大"), QKeySequence::ZoomIn, this, &MainWindow::zoomIn);
+    zoomOutAction_ = viewMenu_->addAction(uiText("Zoom Out", "缩小"), QKeySequence::ZoomOut, this, &MainWindow::zoomOut);
+    resetZoomAction_ = viewMenu_->addAction(uiText("Reset Zoom", "重置缩放"), QKeySequence(Qt::CTRL | Qt::Key_0), this, &MainWindow::resetZoom);
+    viewMenu_->addSeparator();
 
     displayModeActionGroup_ = new QActionGroup(this);
     displayModeActionGroup_->setExclusive(true);
+    displayModeActions_.clear();
 
-    QAction* fitAction = viewMenu->addAction("Fit to Window", this, &MainWindow::setFitToWindowMode);
-    fitAction->setCheckable(true);
-    fitAction->setData(static_cast<int>(ImageViewerWidget::DisplayMode::FitToWindow));
-    displayModeActionGroup_->addAction(fitAction);
+    fitToWindowAction_ = viewMenu_->addAction(uiText("Fit to Window", "适合窗口"), this, &MainWindow::setFitToWindowMode);
+    fitToWindowAction_->setCheckable(true);
+    fitToWindowAction_->setData(static_cast<int>(ImageViewerWidget::DisplayMode::FitToWindow));
+    displayModeActionGroup_->addAction(fitToWindowAction_);
+    displayModeActions_.append(fitToWindowAction_);
 
-    QAction* actualAction = viewMenu->addAction("Actual Size", this, &MainWindow::setActualSizeMode);
-    actualAction->setCheckable(true);
-    actualAction->setData(static_cast<int>(ImageViewerWidget::DisplayMode::ActualSize));
-    displayModeActionGroup_->addAction(actualAction);
+    actualSizeAction_ = viewMenu_->addAction(uiText("Actual Size", "实际大小"), this, &MainWindow::setActualSizeMode);
+    actualSizeAction_->setCheckable(true);
+    actualSizeAction_->setData(static_cast<int>(ImageViewerWidget::DisplayMode::ActualSize));
+    displayModeActionGroup_->addAction(actualSizeAction_);
+    displayModeActions_.append(actualSizeAction_);
 
-    QAction* fillAction = viewMenu->addAction("Fill Window", this, &MainWindow::setFillWindowMode);
-    fillAction->setCheckable(true);
-    fillAction->setData(static_cast<int>(ImageViewerWidget::DisplayMode::FillWindow));
-    displayModeActionGroup_->addAction(fillAction);
+    fillWindowAction_ = viewMenu_->addAction(uiText("Fill Window", "填充窗口"), this, &MainWindow::setFillWindowMode);
+    fillWindowAction_->setCheckable(true);
+    fillWindowAction_->setData(static_cast<int>(ImageViewerWidget::DisplayMode::FillWindow));
+    displayModeActionGroup_->addAction(fillWindowAction_);
+    displayModeActions_.append(fillWindowAction_);
 
     setDisplayModeChecked(viewer_->displayMode());
-    viewMenu->addSeparator();
-    thumbnailStripAction_ = viewMenu->addAction("Show Thumbnail Strip", Qt::Key_T, this, &MainWindow::toggleThumbnailStrip);
+    viewMenu_->addSeparator();
+    thumbnailStripAction_ = viewMenu_->addAction(uiText("Show Thumbnail Strip", "显示缩略图栏"), Qt::Key_T, this, &MainWindow::toggleThumbnailStrip);
     thumbnailStripAction_->setCheckable(true);
-    thumbnailAutoHideAction_ = viewMenu->addAction("Auto-hide Thumbnail Strip", this, &MainWindow::toggleAutoHideThumbnailStrip);
+    thumbnailAutoHideAction_ = viewMenu_->addAction(uiText("Auto-hide Thumbnail Strip", "自动隐藏缩略图栏"), this, &MainWindow::toggleAutoHideThumbnailStrip);
     thumbnailAutoHideAction_->setCheckable(true);
     updateThumbnailActions();
     applyThumbnailStripVisibility(false, false);
+
+    languageMenu_ = menuBar()->addMenu(uiText("&Language", "&语言"));
+    languageActionGroup_ = new QActionGroup(this);
+    languageActionGroup_->setExclusive(true);
+    englishLanguageAction_ = languageMenu_->addAction(AppI18n::languageDisplayName(AppI18n::Language::English));
+    englishLanguageAction_->setCheckable(true);
+    languageActionGroup_->addAction(englishLanguageAction_);
+    chineseLanguageAction_ = languageMenu_->addAction(AppI18n::languageDisplayName(AppI18n::Language::Chinese));
+    chineseLanguageAction_->setCheckable(true);
+    languageActionGroup_->addAction(chineseLanguageAction_);
+    connect(englishLanguageAction_, &QAction::toggled, this, [this](bool checked) {
+        if (checked) {
+            AppI18n::setCurrentLanguage(AppI18n::Language::English);
+            retranslateUi();
+        }
+    });
+    connect(chineseLanguageAction_, &QAction::toggled, this, [this](bool checked) {
+        if (checked) {
+            AppI18n::setCurrentLanguage(AppI18n::Language::Chinese);
+            retranslateUi();
+        }
+    });
+
+    if (englishLanguageAction_) {
+        QSignalBlocker blocker(englishLanguageAction_);
+        englishLanguageAction_->setChecked(AppI18n::currentLanguage() == AppI18n::Language::English);
+    }
+    if (chineseLanguageAction_) {
+        QSignalBlocker blocker(chineseLanguageAction_);
+        chineseLanguageAction_->setChecked(AppI18n::currentLanguage() == AppI18n::Language::Chinese);
+    }
 }
 
 void MainWindow::createFileAssociationMenu(QMenu* fileMenu)
 {
-    fileAssociationMenu_ = fileMenu->addMenu("File &Associations");
+    fileAssociationMenu_ = fileMenu->addMenu(uiText("File &Associations", "文件关联"));
 
-    QAction* associateAllAction = fileAssociationMenu_->addAction("Associate All");
-    QAction* clearAllAction = fileAssociationMenu_->addAction("Clear All");
+    associateAllAction_ = fileAssociationMenu_->addAction(uiText("Associate All", "全部关联"));
+    clearAllAction_ = fileAssociationMenu_->addAction(uiText("Clear All", "清除关联"));
     fileAssociationMenu_->addSeparator();
 
     auto addGroupMenu = [this](QMenu* parent, const FileAssociationGroup& group) {
-        QMenu* groupMenu = parent->addMenu(group.title);
+        QMenu* groupMenu = parent->addMenu(uiText(group.englishTitle, group.chineseTitle));
+        fileAssociationGroupMenus_.push_back({groupMenu, group.englishTitle, group.chineseTitle});
         for (const QString& extension : normalizedExtensions(group.extensions)) {
             QAction* action = groupMenu->addAction(fileAssociationDisplayName(extension));
             action->setCheckable(true);
@@ -661,61 +824,73 @@ void MainWindow::createFileAssociationMenu(QMenu* fileMenu)
                 action->setChecked(isFileAssociationEnabled(extension));
                 QMessageBox::warning(
                     this,
-                    "File Associations",
+                    uiText("File Associations", "文件关联"),
 #ifdef Q_OS_WIN
-                    QStringLiteral("Failed to update the file association for *.%1.\n\nWindows registry changes were not applied.").arg(extension)
+                    uiText(
+                        "Failed to update the file association for *.%1.\n\nWindows registry changes were not applied.",
+                        "无法更新 *.%1 的文件关联。\n\nWindows 注册表更改未生效。").arg(extension)
 #else
-                    QStringLiteral("File associations are only supported on Windows in this build.")
+                    uiText(
+                        "File associations are only supported on Windows in this build.",
+                        "当前构建仅在 Windows 上支持文件关联。")
 #endif
                 );
             });
         }
     };
 
-    QMenu* commonMenu = fileAssociationMenu_->addMenu("Common Formats");
+    commonAssociationMenu_ = fileAssociationMenu_->addMenu(uiText("Common Formats", "常见格式"));
     for (const FileAssociationGroup& group : commonAssociationGroups()) {
-        addGroupMenu(commonMenu, group);
+        addGroupMenu(commonAssociationMenu_, group);
     }
 
-    QMenu* rawMenu = fileAssociationMenu_->addMenu("RAW Formats");
+    rawAssociationMenu_ = fileAssociationMenu_->addMenu(uiText("RAW Formats", "RAW 格式"));
     for (const FileAssociationGroup& group : rawAssociationGroups()) {
-        addGroupMenu(rawMenu, group);
+        addGroupMenu(rawAssociationMenu_, group);
     }
 
     fileAssociationMenu_->addSeparator();
-    QAction* refreshAction = fileAssociationMenu_->addAction("Refresh Status");
+    refreshFileAssociationAction_ = fileAssociationMenu_->addAction(uiText("Refresh Status", "刷新状态"));
 
-    connect(associateAllAction, &QAction::triggered, this, [this]() {
+    connect(associateAllAction_, &QAction::triggered, this, [this]() {
         if (!setFileAssociationsEnabled(allAssociationExtensions(), true)) {
             QMessageBox::warning(
                 this,
-                "File Associations",
+                uiText("File Associations", "文件关联"),
 #ifdef Q_OS_WIN
-                "Some or all file associations could not be written. Check Windows permissions."
+                uiText(
+                    "Some or all file associations could not be written. Check Windows permissions.",
+                    "部分或全部文件关联无法写入，请检查 Windows 权限。")
 #else
-                "File associations are only supported on Windows in this build."
+                uiText(
+                    "File associations are only supported on Windows in this build.",
+                    "当前构建仅在 Windows 上支持文件关联。")
 #endif
             );
         }
         refreshFileAssociationActions();
     });
 
-    connect(clearAllAction, &QAction::triggered, this, [this]() {
+    connect(clearAllAction_, &QAction::triggered, this, [this]() {
         if (!setFileAssociationsEnabled(allAssociationExtensions(), false)) {
             QMessageBox::warning(
                 this,
-                "File Associations",
+                uiText("File Associations", "文件关联"),
 #ifdef Q_OS_WIN
-                "Some or all file associations could not be cleared. Check Windows permissions."
+                uiText(
+                    "Some or all file associations could not be cleared. Check Windows permissions.",
+                    "部分或全部文件关联无法清除，请检查 Windows 权限。")
 #else
-                "File associations are only supported on Windows in this build."
+                uiText(
+                    "File associations are only supported on Windows in this build.",
+                    "当前构建仅在 Windows 上支持文件关联。")
 #endif
             );
         }
         refreshFileAssociationActions();
     });
 
-    connect(refreshAction, &QAction::triggered, this, &MainWindow::refreshFileAssociationActions);
+    connect(refreshFileAssociationAction_, &QAction::triggered, this, &MainWindow::refreshFileAssociationActions);
     connect(fileAssociationMenu_, &QMenu::aboutToShow, this, &MainWindow::refreshFileAssociationActions);
 
 #ifndef Q_OS_WIN
@@ -742,7 +917,7 @@ void MainWindow::syncFileAssociationAction(const QString& extension)
 
 void MainWindow::createInfoPanel()
 {
-    infoDock_ = new QDockWidget("Image Info", this);
+    infoDock_ = new QDockWidget(uiText("Image Info", "图片信息"), this);
     infoDock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     infoDock_->setFeatures(QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable);
     infoDock_->setMinimumWidth(280);
@@ -764,16 +939,147 @@ void MainWindow::createInfoPanel()
     connect(infoDock_, &QDockWidget::visibilityChanged, this, [this](bool visible) {
         if (infoPanelAction_) {
             infoPanelAction_->setChecked(visible);
+            infoPanelAction_->setText(visible ? uiText("Hide Info Panel", "隐藏信息面板") : uiText("Show Info Panel", "显示信息面板"));
         }
     });
+}
+
+void MainWindow::retranslateUi()
+{
+    if (fileMenu_) {
+        fileMenu_->setTitle(uiText("&File", "&文件"));
+    }
+    if (openFileAction_) {
+        openFileAction_->setText(uiText("&Open File...", "&打开文件..."));
+    }
+    if (openFolderAction_) {
+        openFolderAction_->setText(uiText("Open &Folder...", "打开&文件夹..."));
+    }
+    if (exitAction_) {
+        exitAction_->setText(uiText("E&xit", "退&出"));
+    }
+    if (playbackMenu_) {
+        playbackMenu_->setTitle(uiText("&Playback", "&播放"));
+    }
+    if (playPauseAction_) {
+        playPauseAction_->setText(slideshow_ && slideshow_->isPlaying()
+            ? uiText("Pause Slideshow", "暂停幻灯片放映")
+            : uiText("Start Slideshow", "开始幻灯片放映"));
+    }
+    for (QAction* action : intervalActions_) {
+        if (action) {
+            action->setText(modeLabelForAction(action->data().toInt()));
+        }
+    }
+    if (viewMenu_) {
+        viewMenu_->setTitle(uiText("&View", "&视图"));
+    }
+    if (fullscreenAction_) {
+        fullscreenAction_->setText(isFullScreen()
+            ? uiText("Exit Fullscreen", "退出全屏")
+            : uiText("Enter Fullscreen", "进入全屏"));
+    }
+    if (infoPanelAction_) {
+        infoPanelAction_->setText(infoDock_ && infoDock_->isVisible()
+            ? uiText("Hide Info Panel", "隐藏信息面板")
+            : uiText("Show Info Panel", "显示信息面板"));
+    }
+    if (zoomInAction_) {
+        zoomInAction_->setText(uiText("Zoom In", "放大"));
+    }
+    if (zoomOutAction_) {
+        zoomOutAction_->setText(uiText("Zoom Out", "缩小"));
+    }
+    if (resetZoomAction_) {
+        resetZoomAction_->setText(uiText("Reset Zoom", "重置缩放"));
+    }
+    for (QAction* action : displayModeActions_) {
+        if (!action) {
+            continue;
+        }
+        switch (static_cast<ImageViewerWidget::DisplayMode>(action->data().toInt())) {
+        case ImageViewerWidget::DisplayMode::FitToWindow:
+            action->setText(uiText("Fit to Window", "适合窗口"));
+            break;
+        case ImageViewerWidget::DisplayMode::ActualSize:
+            action->setText(uiText("Actual Size", "实际大小"));
+            break;
+        case ImageViewerWidget::DisplayMode::FillWindow:
+            action->setText(uiText("Fill Window", "填充窗口"));
+            break;
+        }
+    }
+    if (thumbnailStripAction_) {
+        thumbnailStripAction_->setText(thumbnailStripVisible_
+            ? uiText("Hide Thumbnail Strip", "隐藏缩略图栏")
+            : uiText("Show Thumbnail Strip", "显示缩略图栏"));
+    }
+    if (thumbnailAutoHideAction_) {
+        thumbnailAutoHideAction_->setText(uiText("Auto-hide Thumbnail Strip", "自动隐藏缩略图栏"));
+    }
+    if (languageMenu_) {
+        languageMenu_->setTitle(uiText("&Language", "&语言"));
+    }
+    if (englishLanguageAction_) {
+        englishLanguageAction_->setText(AppI18n::languageDisplayName(AppI18n::Language::English));
+    }
+    if (chineseLanguageAction_) {
+        chineseLanguageAction_->setText(AppI18n::languageDisplayName(AppI18n::Language::Chinese));
+    }
+    if (englishLanguageAction_) {
+        QSignalBlocker blocker(englishLanguageAction_);
+        englishLanguageAction_->setChecked(AppI18n::currentLanguage() == AppI18n::Language::English);
+    }
+    if (chineseLanguageAction_) {
+        QSignalBlocker blocker(chineseLanguageAction_);
+        chineseLanguageAction_->setChecked(AppI18n::currentLanguage() == AppI18n::Language::Chinese);
+    }
+    if (fileAssociationMenu_) {
+        fileAssociationMenu_->setTitle(uiText("File &Associations", "文件关联"));
+    }
+    if (associateAllAction_) {
+        associateAllAction_->setText(uiText("Associate All", "全部关联"));
+    }
+    if (clearAllAction_) {
+        clearAllAction_->setText(uiText("Clear All", "清除关联"));
+    }
+    if (refreshFileAssociationAction_) {
+        refreshFileAssociationAction_->setText(uiText("Refresh Status", "刷新状态"));
+    }
+    if (commonAssociationMenu_) {
+        commonAssociationMenu_->setTitle(uiText("Common Formats", "常见格式"));
+    }
+    if (rawAssociationMenu_) {
+        rawAssociationMenu_->setTitle(uiText("RAW Formats", "RAW 格式"));
+    }
+    for (const FileAssociationGroupUi& groupUi : fileAssociationGroupMenus_) {
+        if (groupUi.menu) {
+            groupUi.menu->setTitle(uiText(groupUi.englishTitle, groupUi.chineseTitle));
+        }
+    }
+    if (infoDock_) {
+        infoDock_->setWindowTitle(uiText("Image Info", "图片信息"));
+    }
+    if (viewer_) {
+        viewer_->retranslateUi();
+        if (currentPath_.isEmpty()) {
+            viewer_->setMessage(uiText("No image selected", "未选择图片"));
+        } else if (!lastDecodedImage_.errorMessage.isEmpty() && lastDecodedImage_.filePath == currentPath_) {
+            viewer_->setMessage(uiText("Failed to decode image", "图片解码失败"), lastDecodedImage_.errorMessage);
+        } else if (displayedPath_ != currentPath_ && !viewer_->hasImage()) {
+            viewer_->setLoading(uiText("Loading image...", "正在加载图片..."), QFileInfo(currentPath_).fileName());
+        }
+    }
+    updateInfoPanel(currentPath_.isEmpty() ? nullptr : (lastDecodedImage_.filePath == currentPath_ ? &lastDecodedImage_ : nullptr));
 }
 
 void MainWindow::openPath(const QString& path)
 {
     if (!catalog_.loadFromPath(path)) {
-        viewer_->setMessage("No supported images found", QFileInfo(path).absoluteFilePath());
+        viewer_->setMessage(uiText("No supported images found", "未找到支持的图片"), QFileInfo(path).absoluteFilePath());
         currentPath_.clear();
         displayedPath_.clear();
+        lastDecodedImage_ = {};
         cache_.clear();
         thumbnailCache_.clear();
         thumbnailCacheLru_.clear();
@@ -810,8 +1116,9 @@ void MainWindow::refreshCurrentImage()
 {
     currentPath_ = catalog_.currentPath();
     if (currentPath_.isEmpty()) {
-        viewer_->setMessage("No image selected");
+        viewer_->setMessage(uiText("No image selected", "未选择图片"));
         displayedPath_.clear();
+        lastDecodedImage_ = {};
         updateInfoPanel();
         return;
     }
@@ -819,7 +1126,7 @@ void MainWindow::refreshCurrentImage()
     const bool hasImmediateImage = cache_.contains(currentPath_, DecodeMode::FastPreview)
         || cache_.contains(currentPath_, DecodeMode::FullQuality);
     if (!hasImmediateImage && displayedPath_ != currentPath_) {
-        viewer_->setLoading("Loading image...", QFileInfo(currentPath_).fileName());
+        viewer_->setLoading(uiText("Loading image...", "正在加载图片..."), QFileInfo(currentPath_).fileName());
     }
     updateThumbnailSelection();
 
@@ -909,6 +1216,7 @@ void MainWindow::displayDecodedImage(const DecodedImage& image)
 {
     if (image.isValid()) {
         const bool changedPath = displayedPath_ != image.filePath;
+        lastDecodedImage_ = image;
         viewer_->setImage(image.image);
         displayedPath_ = image.filePath;
         updateThumbnailForPath(image.filePath, image.image);
@@ -924,8 +1232,9 @@ void MainWindow::displayDecodedImage(const DecodedImage& image)
         }
     } else {
         if (!viewer_->hasImage()) {
-            viewer_->setMessage("Failed to decode image", image.errorMessage);
+            viewer_->setMessage(uiText("Failed to decode image", "图片解码失败"), image.errorMessage);
             displayedPath_.clear();
+            lastDecodedImage_ = image;
         }
     }
     updateInfoPanel(&image);
@@ -939,6 +1248,11 @@ void MainWindow::toggleFullscreen()
     } else {
         showFullScreen();
         applyFullscreenMenuBarVisibility(false);
+    }
+    if (fullscreenAction_) {
+        fullscreenAction_->setText(isFullScreen()
+            ? uiText("Exit Fullscreen", "退出全屏")
+            : uiText("Enter Fullscreen", "进入全屏"));
     }
 }
 
@@ -1396,6 +1710,7 @@ void MainWindow::toggleInfoPanel()
     }
     if (infoPanelAction_) {
         infoPanelAction_->setChecked(nextVisible);
+        infoPanelAction_->setText(nextVisible ? uiText("Hide Info Panel", "隐藏信息面板") : uiText("Show Info Panel", "显示信息面板"));
     }
 }
 
@@ -1491,10 +1806,11 @@ void MainWindow::updateThumbnailActions()
 {
     if (thumbnailStripAction_) {
         thumbnailStripAction_->setChecked(thumbnailStripVisible_);
-        thumbnailStripAction_->setText(thumbnailStripVisible_ ? "Hide Thumbnail Strip" : "Show Thumbnail Strip");
+        thumbnailStripAction_->setText(thumbnailStripVisible_ ? uiText("Hide Thumbnail Strip", "隐藏缩略图栏") : uiText("Show Thumbnail Strip", "显示缩略图栏"));
     }
     if (thumbnailAutoHideAction_) {
         thumbnailAutoHideAction_->setChecked(thumbnailAutoHideEnabled_);
+        thumbnailAutoHideAction_->setText(uiText("Auto-hide Thumbnail Strip", "自动隐藏缩略图栏"));
     }
 }
 
@@ -1505,7 +1821,7 @@ void MainWindow::updateInfoPanel(const DecodedImage* decoded)
     }
 
     if (currentPath_.isEmpty()) {
-        infoText_->setPlainText("No image selected.");
+        infoText_->setPlainText(uiText("No image selected.", "未选择图片"));
         return;
     }
 
@@ -1514,14 +1830,14 @@ void MainWindow::updateInfoPanel(const DecodedImage* decoded)
     const QString formatLabel = [formatKind]() {
         switch (formatKind) {
         case ImageFormatKind::Jpeg:
-            return "JPEG";
+            return uiText("JPEG", "JPEG");
         case ImageFormatKind::Heif:
-            return "HEIF / AVIF";
+            return uiText("HEIF / AVIF", "HEIF / AVIF");
         case ImageFormatKind::Arw:
-            return "RAW";
+            return uiText("RAW", "RAW");
         case ImageFormatKind::Unknown:
         default:
-            return "Unknown";
+            return uiText("Unknown", "未知");
         }
     }();
 
@@ -1536,21 +1852,21 @@ void MainWindow::updateInfoPanel(const DecodedImage* decoded)
         lines << QString("  %1: %2").arg(key, value);
     };
 
-    addSection("File");
-    addLine("Name", fileInfo.fileName().isEmpty() ? currentPath_ : fileInfo.fileName());
-    addLine("Folder", fileInfo.absolutePath());
-    addLine("Path", fileInfo.absoluteFilePath());
-    addLine("Extension", fileInfo.suffix().isEmpty() ? "None" : QString(".%1").arg(fileInfo.suffix().toLower()));
-    addLine("Format", formatLabel);
-    addLine("Size on disk", fileInfo.exists() ? formatBytes(fileInfo.size()) : "Unknown");
-    addLine("Modified", formatDateTime(fileInfo.lastModified()));
+    addSection(uiText("File", "文件"));
+    addLine(uiText("Name", "名称"), fileInfo.fileName().isEmpty() ? currentPath_ : fileInfo.fileName());
+    addLine(uiText("Folder", "文件夹"), fileInfo.absolutePath());
+    addLine(uiText("Path", "路径"), fileInfo.absoluteFilePath());
+    addLine(uiText("Extension", "扩展名"), fileInfo.suffix().isEmpty() ? uiText("None", "无") : QString(".%1").arg(fileInfo.suffix().toLower()));
+    addLine(uiText("Format", "格式"), formatLabel);
+    addLine(uiText("Size on disk", "磁盘大小"), fileInfo.exists() ? formatBytes(fileInfo.size()) : uiText("Unknown", "未知"));
+    addLine(uiText("Modified", "修改时间"), formatDateTime(fileInfo.lastModified()));
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    addLine("Created", formatDateTime(fileInfo.birthTime()));
+    addLine(uiText("Created", "创建时间"), formatDateTime(fileInfo.birthTime()));
 #endif
     const int currentIndex = std::max(0, catalog_.currentIndex());
     const int total = catalog_.size();
     if (total > 0) {
-        addLine("Catalog position", QString("%1 / %2").arg(currentIndex + 1).arg(total));
+        addLine(uiText("Catalog position", "目录位置"), QString("%1 / %2").arg(currentIndex + 1).arg(total));
     }
 
     if (decoded && decoded->isValid()) {
@@ -1558,38 +1874,40 @@ void MainWindow::updateInfoPanel(const DecodedImage* decoded)
         const QSize imageSize = image.size();
         const QSize sourceSize = decoded->sourceSize.isValid() ? decoded->sourceSize : imageSize;
 
-        addSection("Decode");
-        addLine("Decoder", decoded->decoderName);
-        addLine("Mode", decoded->isPreview ? "Fast Preview" : "Full Quality");
-        addLine("Source size", QString("%1 x %2").arg(sourceSize.width()).arg(sourceSize.height()));
-        addLine("Preview", decoded->isPreview ? "Yes" : "No");
-        addLine("Metadata lines", QString::number(decoded->metadataLines.size()));
+        addSection(uiText("Decode", "解码"));
+        addLine(uiText("Decoder", "解码器"), decoded->decoderName);
+        addLine(uiText("Mode", "模式"), decoded->isPreview ? uiText("Fast Preview", "快速预览") : uiText("Full Quality", "完整质量"));
+        addLine(uiText("Source size", "源尺寸"), QString("%1 x %2").arg(sourceSize.width()).arg(sourceSize.height()));
+        addLine(uiText("Preview", "预览"), decoded->isPreview ? uiText("Yes", "是") : uiText("No", "否"));
+        addLine(uiText("Metadata lines", "元数据行数"), QString::number(decoded->metadataLines.size()));
 
-        addSection("Image");
-        addLine("Dimensions", QString("%1 x %2").arg(imageSize.width()).arg(imageSize.height()));
-        addLine("Pixels", formatPixels(imageSize));
-        addLine("Aspect ratio", formatAspectRatio(imageSize));
-        addLine("Format", formatImageFormat(image.format()));
-        addLine("Depth", QString("%1 bits").arg(image.depth()));
-        addLine("Alpha", image.hasAlphaChannel() ? "Yes" : "No");
-        addLine("Bytes per line", formatBytes(image.bytesPerLine()));
-        addLine("Memory", formatBytes(image.sizeInBytes()));
-        addLine("DPI X", formatDpi(image.dotsPerMeterX()));
-        addLine("DPI Y", formatDpi(image.dotsPerMeterY()));
-        addLine("Color space", formatColorSpace(image.colorSpace()));
+        addSection(uiText("Image", "图像"));
+        addLine(uiText("Dimensions", "尺寸"), QString("%1 x %2").arg(imageSize.width()).arg(imageSize.height()));
+        addLine(uiText("Pixels", "像素数"), formatPixels(imageSize));
+        addLine(uiText("Aspect ratio", "宽高比"), formatAspectRatio(imageSize));
+        addLine(uiText("Format", "格式"), formatImageFormat(image.format()));
+        addLine(uiText("Depth", "位深"), QString("%1 bits").arg(image.depth()));
+        addLine(uiText("Alpha", "透明通道"), image.hasAlphaChannel() ? uiText("Yes", "是") : uiText("No", "否"));
+        addLine(uiText("Bytes per line", "每行字节数"), formatBytes(image.bytesPerLine()));
+        addLine(uiText("Memory", "内存占用"), formatBytes(image.sizeInBytes()));
+        addLine(uiText("DPI X", "DPI X"), formatDpi(image.dotsPerMeterX()));
+        addLine(uiText("DPI Y", "DPI Y"), formatDpi(image.dotsPerMeterY()));
+        addLine(uiText("Color space", "色彩空间"), formatColorSpace(image.colorSpace()));
 
         if (!decoded->metadataLines.isEmpty()) {
-            addSection("Metadata");
-            lines << decoded->metadataLines;
+            addSection(uiText("Metadata", "元数据"));
+            for (const QString& line : decoded->metadataLines) {
+                lines << translateMetadataLine(line);
+            }
         }
     } else if (decoded && !decoded->errorMessage.isEmpty()) {
-        addSection("Decode");
-        addLine("Decoder", decoded->decoderName);
-        addLine("Status", "Failed");
-        addLine("Error", decoded->errorMessage);
+        addSection(uiText("Decode", "解码"));
+        addLine(uiText("Decoder", "解码器"), decoded->decoderName);
+        addLine(uiText("Status", "状态"), uiText("Failed", "失败"));
+        addLine(uiText("Error", "错误"), decoded->errorMessage);
     } else {
-        addSection("Decode");
-        addLine("Status", "Loading...");
+        addSection(uiText("Decode", "解码"));
+        addLine(uiText("Status", "状态"), uiText("Loading...", "加载中..."));
     }
 
     infoText_->setPlainText(lines.join('\n'));

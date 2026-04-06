@@ -8,6 +8,7 @@
 
 #include <QFutureWatcher>
 #include <QHash>
+#include <QList>
 #include <QListWidget>
 #include <QMainWindow>
 #include <QPlainTextEdit>
@@ -17,11 +18,13 @@
 #include <QStringList>
 #include <QThreadPool>
 #include <QTimer>
+#include <QVector>
 
 class QAction;
 class QActionGroup;
 class QDockWidget;
 class QMenuBar;
+class QMenu;
 class SlideShowController;
 class QListWidgetItem;
 
@@ -59,6 +62,7 @@ private slots:
 private:
     void createMenus();
     void createFileAssociationMenu(QMenu* fileMenu);
+    void retranslateUi();
     void refreshFileAssociationActions();
     void syncFileAssociationAction(const QString& extension);
     void createInfoPanel();
@@ -122,14 +126,44 @@ private:
     QAction* infoPanelAction_ = nullptr;
     QAction* thumbnailStripAction_ = nullptr;
     QAction* thumbnailAutoHideAction_ = nullptr;
+    QAction* openFileAction_ = nullptr;
+    QAction* openFolderAction_ = nullptr;
+    QAction* exitAction_ = nullptr;
+    QAction* zoomInAction_ = nullptr;
+    QAction* zoomOutAction_ = nullptr;
+    QAction* resetZoomAction_ = nullptr;
+    QAction* fitToWindowAction_ = nullptr;
+    QAction* actualSizeAction_ = nullptr;
+    QAction* fillWindowAction_ = nullptr;
+    QAction* associateAllAction_ = nullptr;
+    QAction* clearAllAction_ = nullptr;
+    QAction* refreshFileAssociationAction_ = nullptr;
+    QAction* englishLanguageAction_ = nullptr;
+    QAction* chineseLanguageAction_ = nullptr;
+    QActionGroup* languageActionGroup_ = nullptr;
+    QMenu* fileMenu_ = nullptr;
+    QMenu* playbackMenu_ = nullptr;
+    QMenu* viewMenu_ = nullptr;
+    QMenu* languageMenu_ = nullptr;
     QMenu* fileAssociationMenu_ = nullptr;
+    QMenu* commonAssociationMenu_ = nullptr;
+    QMenu* rawAssociationMenu_ = nullptr;
     QActionGroup* intervalActionGroup_ = nullptr;
     QActionGroup* displayModeActionGroup_ = nullptr;
+    QList<QAction*> intervalActions_;
+    QList<QAction*> displayModeActions_;
     QHash<QString, QAction*> fileAssociationActions_;
+    struct FileAssociationGroupUi {
+        QMenu* menu = nullptr;
+        QString englishTitle;
+        QString chineseTitle;
+    };
+    QVector<FileAssociationGroupUi> fileAssociationGroupMenus_;
 
     qint64 displaySequence_ = 0;
     QString currentPath_;
     QString displayedPath_;
+    DecodedImage lastDecodedImage_;
     QHash<QString, QPixmap> thumbnailCache_;
     QStringList thumbnailCacheLru_;
     qint64 thumbnailCacheBytes_ = 0;

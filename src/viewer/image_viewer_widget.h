@@ -23,7 +23,8 @@ public:
 
     void setImage(const QImage& image);
     void setMessage(const QString& title, const QString& detail = QString());
-    void setLoading(const QString& title = QString("Loading image..."), const QString& detail = QString());
+    void setLoading(const QString& title = QString(), const QString& detail = QString());
+    void retranslateUi();
     void showTransientZoom(const QString& text);
     void showTransientImageInfo(const QString& text);
     void clear();
@@ -89,4 +90,12 @@ private:
     QWidget* transientHudContainer_ = nullptr;
     QLabel* transientHudLabel_ = nullptr;
     QTimer* transientHudTimer_ = nullptr;
+    QString emptyTitleText_;
+    QString emptyDetailText_;
+    QString loadingTitleText_;
+    QString loadingDetailText_;
+    bool emptyTitleCustom_ = false;
+    bool emptyDetailCustom_ = false;
+    bool loadingTitleCustom_ = false;
+    bool loadingDetailCustom_ = false;
 };

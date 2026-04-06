@@ -8,6 +8,8 @@ int main(int argc, char* argv[])
 {
     QApplication app(argc, argv);
     QApplication::setApplicationName("pic-viewer");
+    QApplication::setOrganizationName("pic-viewer");
+    QApplication::setOrganizationDomain("pic-viewer.local");
     QApplication::setApplicationVersion("0.1.0");
     app.setWindowIcon(QIcon(":/icons/app_icon.ico"));
 

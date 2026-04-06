@@ -61,7 +61,7 @@ private slots:
 
 private:
     void createMenus();
-    void createFileAssociationMenu(QMenu* fileMenu);
+    void createFileAssociationMenu();
     void retranslateUi();
     void refreshFileAssociationActions();
     void syncFileAssociationAction(const QString& extension);

@@ -53,7 +53,6 @@ namespace {
 constexpr int kDefaultIntervalMs = 3000;
 constexpr int kThumbnailSize = 96;
 constexpr int kMaxThumbnailInflight = 2;
-constexpr int kMaxImagePrefetchInflight = 3;
 constexpr int kDecodeThreadStackSize = 8 * 1024 * 1024;
 constexpr int kThumbnailStripExpandedHeight = kThumbnailSize + 48;
 constexpr int kThumbnailRevealMargin = 96;
@@ -64,6 +63,17 @@ constexpr int kFullscreenMenuRevealMargin = 8;
 constexpr int kFullscreenMenuAutoHideDelayMs = 1000;
 constexpr qint64 kThumbnailCacheBudgetBytes = 48LL * 1024 * 1024;
 constexpr qint64 kImageCacheBudgetBytes = 256LL * 1024 * 1024;
+
+int cpuThreadCount()
+{
+    const int count = QThread::idealThreadCount();
+    return count > 0 ? count : 1;
+}
+
+int imagePrefetchThreadCount()
+{
+    return std::max(1, cpuThreadCount() - 1);
+}
 
 QString modeLabelForAction(int intervalMs)
 {
@@ -500,7 +510,7 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     setWindowIcon(QIcon(":/icons/app_icon.xpm"));
     resize(1200, 800);
 
-    imageDecodePool_.setMaxThreadCount(std::max(2, QThread::idealThreadCount() / 2));
+    imageDecodePool_.setMaxThreadCount(imagePrefetchThreadCount());
     imageDecodePool_.setStackSize(kDecodeThreadStackSize);
 
     thumbnailDecodePool_.setMaxThreadCount(kMaxThumbnailInflight);
@@ -702,8 +712,6 @@ void MainWindow::createMenus()
     openFileAction_ = fileMenu_->addAction(uiText("&Open File...", "&打开文件..."), QKeySequence::Open, this, &MainWindow::openFile);
     openFolderAction_ = fileMenu_->addAction(uiText("Open &Folder...", "打开&文件夹..."), this, &MainWindow::openFolder);
     fileMenu_->addSeparator();
-    createFileAssociationMenu(fileMenu_);
-    fileMenu_->addSeparator();
     exitAction_ = fileMenu_->addAction(uiText("E&xit", "退&出"), QKeySequence::Quit, this, &QWidget::close);
 
     playbackMenu_ = menuBar()->addMenu(uiText("&Playback", "&播放"));
@@ -767,6 +775,8 @@ void MainWindow::createMenus()
     updateThumbnailActions();
     applyThumbnailStripVisibility(false, false);
 
+    createFileAssociationMenu();
+
     languageMenu_ = menuBar()->addMenu(uiText("&Language", "&语言"));
     languageActionGroup_ = new QActionGroup(this);
     languageActionGroup_->setExclusive(true);
@@ -799,9 +809,9 @@ void MainWindow::createMenus()
     }
 }
 
-void MainWindow::createFileAssociationMenu(QMenu* fileMenu)
+void MainWindow::createFileAssociationMenu()
 {
-    fileAssociationMenu_ = fileMenu->addMenu(uiText("File &Associations", "文件关联"));
+    fileAssociationMenu_ = menuBar()->addMenu(uiText("File &Associations", "文件关联"));
 
     associateAllAction_ = fileAssociationMenu_->addAction(uiText("Associate All", "全部关联"));
     clearAllAction_ = fileAssociationMenu_->addAction(uiText("Clear All", "清除关联"));
@@ -1527,7 +1537,8 @@ void MainWindow::enqueueImagePrefetchRequest(const QString& path, DecodeMode mod
 
 void MainWindow::processPendingImagePrefetchRequests()
 {
-    while (!imagePrefetchRequestQueue_.isEmpty() && imagePrefetchRequestsInFlight_.size() < kMaxImagePrefetchInflight) {
+    const int maxInflight = imagePrefetchThreadCount();
+    while (!imagePrefetchRequestQueue_.isEmpty() && imagePrefetchRequestsInFlight_.size() < maxInflight) {
         const ImagePrefetchJob job = imagePrefetchRequestQueue_.takeFirst();
         const QString path = job.path;
         const DecodeMode mode = job.mode;

@@ -1,48 +1,65 @@
-build/
-.deps/
-vcpkg_installed/
+# Build outputs
+/build/
+/.deps/
+/vcpkg_installed/
+/out/
 
-# Local logs and generated setup markers
-aqtinstall.log
-Configuring
-App
-Building
-*.log
-*.tmp
-*.tmp*
-*.pdb
-*.idb
-*.ilk
-*.obj
+# CMake / generator artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+install_manifest.txt
+*.ninja
+.ninja_log
+.ninja_deps
+
+# Visual Studio / Qt Creator artifacts
+/.vs/
+*.suo
+*.user
+*.userosscache
+*.VC.db
+*.VC.VC.opendb
 *.tlog
 *.lastbuildstate
 *.unsuccessfulbuild
-*.VC.db
-*.VC.VC.opendb
-*.cache
-*.exp
-*.lib
-*.manifest
-*.res
-*.sdf
 *.ipdb
 *.iobj
+*.obj
+*.pdb
+*.ilk
+
+# Compiler / linker outputs
+*.lib
+*.exp
+*.manifest
+*.res
+*.idb
 *.exe.recipe
 *.appx
 *.appxsym
 *.deploy
 
-# OS / editor / user-specific files
-.DS_Store
-# .vscode/
-*.user
+# Logs and temp files
+aqtinstall.log
+*.log
+*.tmp
+*.tmp*
+*.cache
 *.autosave
 
-# Project-local generated markers
-Running
-
-/Building
+# Local generated markers in repo root
 /App
+/Building
+/Configuring
 /Output
-/Stable
 /Package
+/Running
+/Stable
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+

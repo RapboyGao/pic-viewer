@@ -19,7 +19,7 @@
       "name": "Debug pic-viewer (Windows)",
       "type": "cppvsdbg",
       "request": "launch",
-      "program": "${workspaceFolder}\\build\\pic-viewer.exe",
+      "program": "${workspaceFolder}\\build\\Debug\\pic-viewer.exe",
       "args": [],
       "cwd": "${workspaceFolder}",
       "environment": [],

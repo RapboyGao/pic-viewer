@@ -96,6 +96,7 @@ qt_add_executable(test_prefetch_scheduler
 
 qt_add_executable(test_image_decoder
     tests/test_image_decoder.cpp
+    src/app/app_language.cpp
     src/decoder/image_decoder.cpp
 )
 

@@ -1,0 +1,227 @@
+name: package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            artifact_name: pic-viewer-windows
+            package_path: build/pic-viewer-Release.zip
+          - os: macos-14
+            artifact_name: pic-viewer-macos
+            package_path: dist/pic-viewer-macos.zip
+          - os: ubuntu-24.04
+            artifact_name: pic-viewer-linux
+            package_path: dist/pic-viewer-linux.zip
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Cache vcpkg downloads and binary packages
+        if: matrix.os == 'windows-2022'
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vcpkg
+            .deps/vcpkg/downloads
+          key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-
+
+      - name: Install Windows dependencies
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = $env:GITHUB_WORKSPACE
+          $depsDir = Join-Path $root '.deps'
+          $vcpkgRoot = Join-Path $depsDir 'vcpkg'
+
+          New-Item -ItemType Directory -Force -Path $depsDir | Out-Null
+          if (-not (Test-Path (Join-Path $vcpkgRoot '.git'))) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg.git $vcpkgRoot
+          }
+
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+
+      - name: Build Windows package
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          $env:VCPKG_BINARY_SOURCES = "clear;files,$env:GITHUB_WORKSPACE\.cache\vcpkg,readwrite"
+          $env:RUN_TESTS = "0"
+          $env:BUILD_CONFIG = "Release"
+          & "$env:GITHUB_WORKSPACE\scripts\build.bat"
+
+      - name: Cache Homebrew downloads
+        if: matrix.os == 'macos-14'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: ${{ runner.os }}-brew-${{ hashFiles('.github/workflows/package.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-brew-
+
+      - name: Install macOS dependencies
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          brew install cmake qt libheif libraw jpeg-turbo pkg-config ninja
+
+      - name: Build macOS package
+        if: matrix.os == 'macos-14'
+        shell: bash
+        run: |
+          set -euo pipefail
+          export RUN_TESTS=0
+          export BUILD_DIR="${GITHUB_WORKSPACE}/build"
+          "${GITHUB_WORKSPACE}/scripts/build.sh"
+
+          QT_PREFIX="$(brew --prefix qt)"
+          APP_DIR="${GITHUB_WORKSPACE}/dist/pic-viewer.app"
+          ZIP_PATH="${GITHUB_WORKSPACE}/dist/pic-viewer-macos.zip"
+          mkdir -p "${APP_DIR}/Contents/MacOS" "${APP_DIR}/Contents/Resources"
+          cp "${GITHUB_WORKSPACE}/build/pic-viewer" "${APP_DIR}/Contents/MacOS/pic-viewer"
+          cat > "${APP_DIR}/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key>
+            <string>en</string>
+            <key>CFBundleExecutable</key>
+            <string>pic-viewer</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.albert.pic-viewer</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundleName</key>
+            <string>pic-viewer</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleShortVersionString</key>
+            <string>0.1.0</string>
+            <key>CFBundleVersion</key>
+            <string>0.1.0</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.15</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+          "${QT_PREFIX}/bin/macdeployqt" "${APP_DIR}" -always-overwrite -verbose=1
+          rm -f "${ZIP_PATH}"
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "${APP_DIR}" "${ZIP_PATH}"
+
+      - name: Cache apt archives
+        if: matrix.os == 'ubuntu-24.04'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt
+          key: ${{ runner.os }}-apt-${{ hashFiles('.github/workflows/package.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-apt-
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.cache/apt/archives/partial" "$HOME/.cache/apt/lists/partial"
+          sudo apt-get -o Dir::Cache::archives="$HOME/.cache/apt/archives" \
+            -o Dir::State::lists="$HOME/.cache/apt/lists" update
+          sudo apt-get -o Dir::Cache::archives="$HOME/.cache/apt/archives" \
+            -o Dir::State::lists="$HOME/.cache/apt/lists" install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            qt6-base-dev \
+            qt6-tools-dev \
+            qt6-tools-dev-tools \
+            libheif-dev \
+            libraw-dev \
+            libjpeg-turbo8-dev \
+            patchelf \
+            zip \
+            wget
+
+      - name: Build Linux package
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake/Qt6
+          cmake --build build --parallel
+
+          APP_DIR="${GITHUB_WORKSPACE}/dist/pic-viewer.AppDir"
+          ZIP_PATH="${GITHUB_WORKSPACE}/dist/pic-viewer-linux.zip"
+          mkdir -p "${APP_DIR}/usr/bin" \
+                   "${APP_DIR}/usr/share/applications" \
+                   "${APP_DIR}/usr/share/icons/hicolor/scalable/apps"
+          cp "${GITHUB_WORKSPACE}/build/pic-viewer" "${APP_DIR}/usr/bin/pic-viewer"
+          cp "${GITHUB_WORKSPACE}/assets/app_icon.svg" "${APP_DIR}/usr/share/icons/hicolor/scalable/apps/pic-viewer.svg"
+          cat > "${APP_DIR}/usr/share/applications/pic-viewer.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=pic-viewer
+          Exec=pic-viewer
+          Icon=pic-viewer
+          Terminal=false
+          Categories=Graphics;Photography;
+          DESKTOP
+
+          curl -L -o /tmp/linuxdeployqt.AppImage \
+            https://github.com/linuxdeploy/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
+          chmod +x /tmp/linuxdeployqt.AppImage
+          /tmp/linuxdeployqt.AppImage "${APP_DIR}/usr/share/applications/pic-viewer.desktop" \
+            -appimage \
+            -bundle-non-qt-libs \
+            -no-translations \
+            -unsupported-allow-new-glibc
+          rm -f "${ZIP_PATH}"
+          (cd "${GITHUB_WORKSPACE}/dist" && zip -r "pic-viewer-linux.zip" "pic-viewer.AppDir")
+
+      - name: Upload zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.package_path }}
+
+  release:
+    name: Publish Release Assets
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged zips
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Attach zip files to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*.zip

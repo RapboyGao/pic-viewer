@@ -120,12 +120,18 @@ if not exist "%STABLE_OUTPUT_DIR%" mkdir "%STABLE_OUTPUT_DIR%"
 if exist "%OUTPUT_EXE%" (
   copy /Y "%OUTPUT_EXE%" "%STABLE_OUTPUT_DIR%\pic-viewer.exe" >nul
   if errorlevel 1 exit /b 1
+  > "%STABLE_OUTPUT_DIR%\qt.conf" (
+    echo [Paths]
+    echo Plugins=plugins
+  )
   if exist "%VCPKG_ROOT%\installed\x64-windows\bin" (
     copy /Y "%VCPKG_ROOT%\installed\x64-windows\bin\*.dll" "%STABLE_OUTPUT_DIR%\" >nul 2>nul
   )
   if exist "%QT_PREFIX%\Qt6\plugins\platforms\qwindows.dll" (
     if not exist "%STABLE_PLUGIN_DIR%\platforms" mkdir "%STABLE_PLUGIN_DIR%\platforms"
     copy /Y "%QT_PREFIX%\Qt6\plugins\platforms\qwindows.dll" "%STABLE_PLUGIN_DIR%\platforms\" >nul 2>nul
+    if not exist "%STABLE_OUTPUT_DIR%\platforms" mkdir "%STABLE_OUTPUT_DIR%\platforms"
+    copy /Y "%QT_PREFIX%\Qt6\plugins\platforms\qwindows.dll" "%STABLE_OUTPUT_DIR%\platforms\" >nul 2>nul
   )
   if exist "%QT_PREFIX%\Qt6\plugins\imageformats" (
     if not exist "%STABLE_PLUGIN_DIR%\imageformats" mkdir "%STABLE_PLUGIN_DIR%\imageformats"
@@ -136,9 +142,15 @@ if exist "%OUTPUT_EXE%" (
     copy /Y "%QT_PREFIX%\Qt6\plugins\styles\qmodernwindowsstyle.dll" "%STABLE_PLUGIN_DIR%\styles\" >nul 2>nul
   )
 )
+set "PACKAGE_PATH=%BUILD_DIR%\pic-viewer-%BUILD_CONFIG%.zip"
+if exist "%STABLE_OUTPUT_DIR%\pic-viewer.exe" (
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%STABLE_OUTPUT_DIR%\*' -DestinationPath '%PACKAGE_PATH%' -Force"
+  if errorlevel 1 exit /b 1
+)
 if exist "%OUTPUT_EXE%" (
   echo ==> Build complete: %OUTPUT_EXE%
   echo ==> Stable output: %STABLE_OUTPUT_DIR%\pic-viewer.exe
+  if exist "%PACKAGE_PATH%" echo ==> Package created: %PACKAGE_PATH%
 ) else (
   echo ==> Build complete, but %OUTPUT_EXE% was not found
 )

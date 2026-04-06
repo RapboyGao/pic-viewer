@@ -1,6 +1,7 @@
 #include "decoder/image_decoder.h"
 
 #include <QFileInfo>
+#include <QDateTime>
 #include <QImage>
 #include <QImageReader>
 #include <QTransform>
@@ -35,6 +36,19 @@ QString safeLatin1(const char* value)
     return QString::fromLatin1(value);
 }
 
+QStringList collectQtTextMetadata(QImageReader& reader)
+{
+    QStringList metadata;
+    const QStringList keys = reader.textKeys();
+    for (const QString& key : keys) {
+        const QString value = reader.text(key);
+        if (!value.isEmpty()) {
+            metadata << QString("%1: %2").arg(key, value);
+        }
+    }
+    return metadata;
+}
+
 int openRawFile(LibRaw& rawProcessor, const QString& path)
 {
 #ifdef _WIN32
@@ -54,10 +68,13 @@ DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
     DecodedImage result;
     result.filePath = path;
     result.decoderName = decoder;
+    const QSize sourceSize = reader.size();
     result.image = reader.read();
-    result.sourceSize = result.image.size();
+    result.sourceSize = sourceSize.isValid() ? sourceSize : result.image.size();
     if (result.image.isNull()) {
         result.errorMessage = reader.errorString();
+    } else {
+        result.metadataLines = collectQtTextMetadata(reader);
     }
     return result;
 }
@@ -132,6 +149,11 @@ DecodedImage decodeJpeg(const QString& path)
     result.image = image.copy().convertToFormat(QImage::Format_RGBA8888);
     result.sourceSize = result.image.size();
     result.decoderName = "jpeg-turbo";
+    QImageReader metadataReader(path);
+    metadataReader.setAutoTransform(true);
+    if (metadataReader.canRead()) {
+        result.metadataLines = collectQtTextMetadata(metadataReader);
+    }
     if (result.image.isNull()) {
         return decodeWithQtReader(path, "qt-imageio");
     }
@@ -188,6 +210,11 @@ DecodedImage decodeHeif(const QString& path)
     result.image = qimage.copy();
     result.sourceSize = result.image.size();
     result.decoderName = "libheif";
+    QImageReader metadataReader(path);
+    metadataReader.setAutoTransform(true);
+    if (metadataReader.canRead()) {
+        result.metadataLines = collectQtTextMetadata(metadataReader);
+    }
     return result;
 }
 
@@ -268,11 +295,33 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
         QString("Aperture: %1").arg(rawProcessor.imgdata.other.aperture > 0.0f ? QString::number(rawProcessor.imgdata.other.aperture, 'f', 1) : QString("Unknown")),
         QString("Focal length: %1").arg(rawProcessor.imgdata.other.focal_len > 0.0f ? QString::number(rawProcessor.imgdata.other.focal_len, 'f', 1) : QString("Unknown")),
     };
+    if (rawProcessor.imgdata.other.timestamp > 0) {
+        result.metadataLines << QString("Capture time: %1")
+                                    .arg(QDateTime::fromSecsSinceEpoch(
+                                             static_cast<qint64>(rawProcessor.imgdata.other.timestamp),
+                                             Qt::LocalTime)
+                                             .toString("yyyy-MM-dd HH:mm:ss"));
+    }
+    if (rawProcessor.imgdata.other.shot_order > 0) {
+        result.metadataLines << QString("Shot order: %1").arg(rawProcessor.imgdata.other.shot_order);
+    }
+    const QString description = safeLatin1(rawProcessor.imgdata.other.desc);
+    if (!description.isEmpty()) {
+        result.metadataLines << QString("Description: %1").arg(description);
+    }
+    const QString artist = safeLatin1(rawProcessor.imgdata.other.artist);
+    if (!artist.isEmpty()) {
+        result.metadataLines << QString("Artist: %1").arg(artist);
+    }
     if (rawProcessor.imgdata.other.parsed_gps.gpsparsed) {
         const auto& gps = rawProcessor.imgdata.other.parsed_gps;
-        result.metadataLines << QString("GPS: %1, %2")
-                                     .arg(QString::number(gps.latitude[0], 'f', 6))
-                                     .arg(QString::number(gps.longitude[0], 'f', 6));
+        const double latitude = (qAbs(gps.latitude[0]) + (gps.latitude[1] / 60.0) + (gps.latitude[2] / 3600.0))
+            * ((gps.latref == 'S') ? -1.0 : 1.0);
+        const double longitude = (qAbs(gps.longitude[0]) + (gps.longitude[1] / 60.0) + (gps.longitude[2] / 3600.0))
+            * ((gps.longref == 'W') ? -1.0 : 1.0);
+        result.metadataLines << QString("GPS latitude: %1").arg(QString::number(latitude, 'f', 6));
+        result.metadataLines << QString("GPS longitude: %1").arg(QString::number(longitude, 'f', 6));
+        result.metadataLines << QString("GPS altitude: %1 m").arg(QString::number(gps.altitude, 'f', 1));
     }
 
     libraw_processed_image_t* previewImage = nullptr;

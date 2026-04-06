@@ -7,6 +7,7 @@
 #include "viewer/image_viewer_widget.h"
 
 #include <QFutureWatcher>
+#include <QHash>
 #include <QListWidget>
 #include <QMainWindow>
 #include <QPlainTextEdit>
@@ -57,6 +58,9 @@ private slots:
 
 private:
     void createMenus();
+    void createFileAssociationMenu(QMenu* fileMenu);
+    void refreshFileAssociationActions();
+    void syncFileAssociationAction(const QString& extension);
     void createInfoPanel();
     void createThumbnailStrip();
     void applyThumbnailStripVisibility(bool visible, bool animated);
@@ -82,6 +86,9 @@ private:
     void updateInfoPanel(const DecodedImage* decoded = nullptr);
     void setIntervalActionChecked(int intervalMs);
     void setDisplayModeChecked(ImageViewerWidget::DisplayMode mode);
+    [[nodiscard]] bool isFileAssociationEnabled(const QString& extension) const;
+    bool setFileAssociationEnabled(const QString& extension, bool enabled, bool notifyShell = true);
+    bool setFileAssociationsEnabled(const QStringList& extensions, bool enabled);
     [[nodiscard]] QString thumbnailKey(const QString& path) const;
     void enqueueThumbnailRequest(const QString& path, int priority);
     void enqueueImagePrefetchRequests(const QList<PrefetchScheduler::Request>& requests);
@@ -115,8 +122,10 @@ private:
     QAction* infoPanelAction_ = nullptr;
     QAction* thumbnailStripAction_ = nullptr;
     QAction* thumbnailAutoHideAction_ = nullptr;
+    QMenu* fileAssociationMenu_ = nullptr;
     QActionGroup* intervalActionGroup_ = nullptr;
     QActionGroup* displayModeActionGroup_ = nullptr;
+    QHash<QString, QAction*> fileAssociationActions_;
 
     qint64 displaySequence_ = 0;
     QString currentPath_;

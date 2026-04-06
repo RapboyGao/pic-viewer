@@ -7,6 +7,8 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QColorSpace>
+#include <QDateTime>
 #include <QCursor>
 #include <QEvent>
 #include <QFileDialog>
@@ -15,11 +17,15 @@
 #include <QIcon>
 #include <QKeyEvent>
 #include <QKeySequence>
+#include <QList>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QDockWidget>
+#include <QDir>
+#include <QMessageBox>
 #include <QPoint>
+#include <QSignalBlocker>
 #include <QShortcut>
 #include <QScrollBar>
 #include <QFrame>
@@ -30,6 +36,14 @@
 #include <QThread>
 #include <QtConcurrent>
 #include <algorithm>
+#include <string>
+
+#ifdef Q_OS_WIN
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
+#include <shlobj.h>
+#endif
 
 namespace {
 
@@ -60,6 +74,306 @@ qint64 estimatePixmapCost(const QPixmap& pixmap)
     }
     return std::max<qint64>(1, static_cast<qint64>(pixmap.width()) * pixmap.height() * 4);
 }
+
+QString formatBytes(qint64 bytes)
+{
+    static const char* const units[] = {"B", "KiB", "MiB", "GiB", "TiB"};
+    constexpr int kUnitCount = static_cast<int>(sizeof(units) / sizeof(units[0]));
+    double value = static_cast<double>(bytes);
+    int unitIndex = 0;
+    while (value >= 1024.0 && unitIndex < kUnitCount - 1) {
+        value /= 1024.0;
+        ++unitIndex;
+    }
+    if (unitIndex == 0) {
+        return QString("%1 %2").arg(bytes).arg(units[unitIndex]);
+    }
+    return QString("%1 %2").arg(QString::number(value, 'f', value >= 10.0 ? 1 : 2)).arg(units[unitIndex]);
+}
+
+QString formatDateTime(const QDateTime& dateTime)
+{
+    if (!dateTime.isValid()) {
+        return "Unknown";
+    }
+    return dateTime.toString("yyyy-MM-dd HH:mm:ss");
+}
+
+QString formatColorSpace(const QColorSpace& colorSpace)
+{
+    if (!colorSpace.isValid()) {
+        return "Unknown";
+    }
+
+    const QString description = colorSpace.description();
+    return description.isEmpty() ? QString("Valid color space") : description;
+}
+
+QString formatImageFormat(QImage::Format format)
+{
+    switch (format) {
+    case QImage::Format_Invalid:
+        return "Invalid";
+    case QImage::Format_Mono:
+        return "Mono";
+    case QImage::Format_MonoLSB:
+        return "Mono LSB";
+    case QImage::Format_Indexed8:
+        return "Indexed8";
+    case QImage::Format_RGB32:
+        return "RGB32";
+    case QImage::Format_ARGB32:
+        return "ARGB32";
+    case QImage::Format_ARGB32_Premultiplied:
+        return "ARGB32 Premultiplied";
+    case QImage::Format_RGB888:
+        return "RGB888";
+    case QImage::Format_RGBA8888:
+        return "RGBA8888";
+    case QImage::Format_RGBA8888_Premultiplied:
+        return "RGBA8888 Premultiplied";
+    case QImage::Format_RGBX8888:
+        return "RGBX8888";
+    case QImage::Format_Grayscale8:
+        return "Grayscale8";
+    default:
+        return QString("Format %1").arg(static_cast<int>(format));
+    }
+}
+
+QString formatAspectRatio(const QSize& size)
+{
+    if (!size.isValid() || size.height() <= 0) {
+        return "Unknown";
+    }
+
+    return QString("%1:1").arg(QString::number(static_cast<double>(size.width()) / size.height(), 'f', 2));
+}
+
+QString formatPixels(const QSize& size)
+{
+    if (!size.isValid()) {
+        return "Unknown";
+    }
+
+    const qint64 pixels = static_cast<qint64>(size.width()) * static_cast<qint64>(size.height());
+    return QString("%1").arg(pixels);
+}
+
+QString formatDpi(double dotsPerMeter)
+{
+    if (dotsPerMeter <= 0.0) {
+        return "Unknown";
+    }
+
+    return QString::number(dotsPerMeter / 39.37007874, 'f', 1);
+}
+
+struct FileAssociationGroup
+{
+    QString title;
+    QStringList extensions;
+};
+
+QStringList normalizedExtensions(QStringList extensions)
+{
+    extensions.removeDuplicates();
+    extensions.sort(Qt::CaseInsensitive);
+    return extensions;
+}
+
+QList<FileAssociationGroup> commonAssociationGroups()
+{
+    return {
+        {"JPEG / HEIF", {"jpg", "jpeg", "jpe", "jfif", "heic", "heif", "hif", "avif", "avifs"}},
+        {"PNG / GIF", {"png", "apng", "gif"}},
+        {"Web / Modern", {"webp", "jxl", "jp2", "jxr"}},
+        {"Bitmap / Legacy", {"bmp", "dib", "ico", "icon", "pbm", "pfm", "pgm", "pic", "pnm", "ppm", "qoi", "ras", "sr", "tga"}},
+        {"Editor / Print", {"psd", "exr", "hdr", "svg", "tif", "tiff"}},
+    };
+}
+
+QList<FileAssociationGroup> rawAssociationGroups()
+{
+    return {
+        {"Sony RAW", {"arw", "sr2", "srf"}},
+        {"Canon RAW", {"cr2", "cr3", "crw"}},
+        {"Nikon RAW", {"nef", "nrw"}},
+        {"Fujifilm RAW", {"raf"}},
+        {"Panasonic RAW", {"rw2"}},
+        {"Olympus / OM RAW", {"orf"}},
+        {"Pentax RAW", {"pef"}},
+        {"Leica / DNG", {"dng"}},
+        {"Other RAW", {"3fr", "ari", "bay", "cap", "dcr", "dcs", "drf", "eip", "erf", "fff", "gpr", "iiq", "k25", "kdc", "mdc", "mef", "mos", "mrw", "ptx", "r3d", "raw", "rwl", "rwz", "srw", "x3f"}},
+    };
+}
+
+QStringList allAssociationExtensions()
+{
+    QStringList extensions;
+    for (const FileAssociationGroup& group : commonAssociationGroups()) {
+        extensions += group.extensions;
+    }
+    for (const FileAssociationGroup& group : rawAssociationGroups()) {
+        extensions += group.extensions;
+    }
+    return normalizedExtensions(extensions);
+}
+
+QString fileAssociationProgId(const QString& extension)
+{
+    return QStringLiteral("pic-viewer.%1").arg(extension.toLower());
+}
+
+QString fileAssociationDisplayName(const QString& extension)
+{
+    return QStringLiteral("%1 (*.%2)").arg(extension.toUpper(), extension.toLower());
+}
+
+QString fileAssociationCommand()
+{
+    const QString exePath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+    return QStringLiteral("\"%1\" \"%2\"").arg(exePath, QStringLiteral("%1"));
+}
+
+QString fileAssociationIcon()
+{
+    const QString exePath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
+    return QStringLiteral("\"%1\",0").arg(exePath);
+}
+
+#ifdef Q_OS_WIN
+QString windowsErrorMessage(DWORD errorCode)
+{
+    LPWSTR buffer = nullptr;
+    const DWORD flags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
+    const DWORD size = FormatMessageW(flags, nullptr, errorCode, 0, reinterpret_cast<LPWSTR>(&buffer), 0, nullptr);
+    QString message = size > 0 && buffer
+        ? QString::fromWCharArray(buffer).trimmed()
+        : QStringLiteral("Windows error %1").arg(errorCode);
+    if (buffer) {
+        LocalFree(buffer);
+    }
+    return message;
+}
+
+QString registryPathForExtension(const QString& extension)
+{
+    return QStringLiteral("Software\\Classes\\.%1").arg(extension.toLower());
+}
+
+QString registryPathForProgId(const QString& progId)
+{
+    return QStringLiteral("Software\\Classes\\%1").arg(progId);
+}
+
+bool openRegistryKey(HKEY root, const QString& path, REGSAM access, HKEY* handle)
+{
+    const std::wstring widePath = path.toStdWString();
+    return RegCreateKeyExW(root, widePath.c_str(), 0, nullptr, 0, access, nullptr, handle, nullptr) == ERROR_SUCCESS;
+}
+
+bool setRegistryDefaultString(HKEY root, const QString& path, const QString& value, QString* errorMessage)
+{
+    HKEY key = nullptr;
+    if (!openRegistryKey(root, path, KEY_SET_VALUE, &key)) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Unable to open registry key: %1").arg(path);
+        }
+        return false;
+    }
+
+    const std::wstring wideValue = value.toStdWString();
+    const LONG status = RegSetValueExW(
+        key,
+        nullptr,
+        0,
+        REG_SZ,
+        reinterpret_cast<const BYTE*>(wideValue.c_str()),
+        static_cast<DWORD>((wideValue.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Unable to write registry value: %1").arg(windowsErrorMessage(status));
+        }
+        return false;
+    }
+    return true;
+}
+
+bool readRegistryDefaultString(HKEY root, const QString& path, QString* value)
+{
+    HKEY key = nullptr;
+    const std::wstring widePath = path.toStdWString();
+    if (RegOpenKeyExW(root, widePath.c_str(), 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) {
+        return false;
+    }
+
+    DWORD type = 0;
+    DWORD dataSize = 0;
+    LONG status = RegQueryValueExW(key, nullptr, nullptr, &type, nullptr, &dataSize);
+    if (status != ERROR_SUCCESS || type != REG_SZ || dataSize == 0) {
+        RegCloseKey(key);
+        return false;
+    }
+
+    std::wstring buffer(dataSize / sizeof(wchar_t), L'\0');
+    status = RegQueryValueExW(
+        key,
+        nullptr,
+        nullptr,
+        &type,
+        reinterpret_cast<LPBYTE>(buffer.data()),
+        &dataSize);
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS || type != REG_SZ) {
+        return false;
+    }
+
+    if (value) {
+        *value = QString::fromWCharArray(buffer.c_str());
+    }
+    return true;
+}
+
+bool deleteRegistryTreeIfExists(HKEY root, const QString& path, QString* errorMessage)
+{
+    const std::wstring widePath = path.toStdWString();
+    const LONG status = RegDeleteTreeW(root, widePath.c_str());
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return true;
+    }
+    if (status != ERROR_SUCCESS) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Unable to delete registry key: %1").arg(windowsErrorMessage(status));
+        }
+        return false;
+    }
+    return true;
+}
+
+bool deleteRegistryDefaultValue(HKEY root, const QString& path, QString* errorMessage)
+{
+    HKEY key = nullptr;
+    const std::wstring widePath = path.toStdWString();
+    if (RegOpenKeyExW(root, widePath.c_str(), 0, KEY_SET_VALUE, &key) != ERROR_SUCCESS) {
+        return true;
+    }
+
+    const LONG status = RegDeleteValueW(key, nullptr);
+    RegCloseKey(key);
+    if (status == ERROR_FILE_NOT_FOUND) {
+        return true;
+    }
+    if (status != ERROR_SUCCESS) {
+        if (errorMessage) {
+            *errorMessage = QStringLiteral("Unable to clear registry value: %1").arg(windowsErrorMessage(status));
+        }
+        return false;
+    }
+    return true;
+}
+#endif
 
 } // namespace
 
@@ -263,6 +577,8 @@ void MainWindow::createMenus()
     fileMenu->addAction("&Open File...", QKeySequence::Open, this, &MainWindow::openFile);
     fileMenu->addAction("Open &Folder...", this, &MainWindow::openFolder);
     fileMenu->addSeparator();
+    createFileAssociationMenu(fileMenu);
+    fileMenu->addSeparator();
     fileMenu->addAction("E&xit", QKeySequence::Quit, this, &QWidget::close);
 
     QMenu* playbackMenu = menuBar()->addMenu("&Playback");
@@ -319,6 +635,109 @@ void MainWindow::createMenus()
     thumbnailAutoHideAction_->setCheckable(true);
     updateThumbnailActions();
     applyThumbnailStripVisibility(false, false);
+}
+
+void MainWindow::createFileAssociationMenu(QMenu* fileMenu)
+{
+    fileAssociationMenu_ = fileMenu->addMenu("File &Associations");
+
+    QAction* associateAllAction = fileAssociationMenu_->addAction("Associate All");
+    QAction* clearAllAction = fileAssociationMenu_->addAction("Clear All");
+    fileAssociationMenu_->addSeparator();
+
+    auto addGroupMenu = [this](QMenu* parent, const FileAssociationGroup& group) {
+        QMenu* groupMenu = parent->addMenu(group.title);
+        for (const QString& extension : normalizedExtensions(group.extensions)) {
+            QAction* action = groupMenu->addAction(fileAssociationDisplayName(extension));
+            action->setCheckable(true);
+            fileAssociationActions_.insert(extension, action);
+            connect(action, &QAction::toggled, this, [this, extension, action](bool enabled) {
+                if (setFileAssociationEnabled(extension, enabled)) {
+                    refreshFileAssociationActions();
+                    return;
+                }
+
+                QSignalBlocker blocker(action);
+                action->setChecked(isFileAssociationEnabled(extension));
+                QMessageBox::warning(
+                    this,
+                    "File Associations",
+#ifdef Q_OS_WIN
+                    QStringLiteral("Failed to update the file association for *.%1.\n\nWindows registry changes were not applied.").arg(extension)
+#else
+                    QStringLiteral("File associations are only supported on Windows in this build.")
+#endif
+                );
+            });
+        }
+    };
+
+    QMenu* commonMenu = fileAssociationMenu_->addMenu("Common Formats");
+    for (const FileAssociationGroup& group : commonAssociationGroups()) {
+        addGroupMenu(commonMenu, group);
+    }
+
+    QMenu* rawMenu = fileAssociationMenu_->addMenu("RAW Formats");
+    for (const FileAssociationGroup& group : rawAssociationGroups()) {
+        addGroupMenu(rawMenu, group);
+    }
+
+    fileAssociationMenu_->addSeparator();
+    QAction* refreshAction = fileAssociationMenu_->addAction("Refresh Status");
+
+    connect(associateAllAction, &QAction::triggered, this, [this]() {
+        if (!setFileAssociationsEnabled(allAssociationExtensions(), true)) {
+            QMessageBox::warning(
+                this,
+                "File Associations",
+#ifdef Q_OS_WIN
+                "Some or all file associations could not be written. Check Windows permissions."
+#else
+                "File associations are only supported on Windows in this build."
+#endif
+            );
+        }
+        refreshFileAssociationActions();
+    });
+
+    connect(clearAllAction, &QAction::triggered, this, [this]() {
+        if (!setFileAssociationsEnabled(allAssociationExtensions(), false)) {
+            QMessageBox::warning(
+                this,
+                "File Associations",
+#ifdef Q_OS_WIN
+                "Some or all file associations could not be cleared. Check Windows permissions."
+#else
+                "File associations are only supported on Windows in this build."
+#endif
+            );
+        }
+        refreshFileAssociationActions();
+    });
+
+    connect(refreshAction, &QAction::triggered, this, &MainWindow::refreshFileAssociationActions);
+    connect(fileAssociationMenu_, &QMenu::aboutToShow, this, &MainWindow::refreshFileAssociationActions);
+
+#ifndef Q_OS_WIN
+    fileAssociationMenu_->setEnabled(false);
+#endif
+
+    refreshFileAssociationActions();
+}
+
+void MainWindow::refreshFileAssociationActions()
+{
+    for (auto it = fileAssociationActions_.cbegin(); it != fileAssociationActions_.cend(); ++it) {
+        syncFileAssociationAction(it.key());
+    }
+}
+
+void MainWindow::syncFileAssociationAction(const QString& extension)
+{
+    if (QAction* action = fileAssociationActions_.value(extension)) {
+        QSignalBlocker blocker(action);
+        action->setChecked(isFileAssociationEnabled(extension));
+    }
 }
 
 void MainWindow::createInfoPanel()
@@ -837,6 +1256,92 @@ void MainWindow::setDisplayModeChecked(ImageViewerWidget::DisplayMode mode)
     }
 }
 
+bool MainWindow::isFileAssociationEnabled(const QString& extension) const
+{
+#ifdef Q_OS_WIN
+    QString currentProgId;
+    if (!readRegistryDefaultString(HKEY_CURRENT_USER, registryPathForExtension(extension), &currentProgId)) {
+        return false;
+    }
+    return currentProgId.compare(fileAssociationProgId(extension), Qt::CaseInsensitive) == 0;
+#else
+    Q_UNUSED(extension);
+    return false;
+#endif
+}
+
+bool MainWindow::setFileAssociationEnabled(const QString& extension, bool enabled, bool notifyShell)
+{
+#ifndef Q_OS_WIN
+    Q_UNUSED(extension);
+    Q_UNUSED(enabled);
+    Q_UNUSED(notifyShell);
+    return false;
+#else
+    const QString normalizedExtension = extension.toLower();
+    const QString progId = fileAssociationProgId(normalizedExtension);
+    const QString extensionKey = registryPathForExtension(normalizedExtension);
+    const QString progIdKey = registryPathForProgId(progId);
+    QString errorMessage;
+
+    if (isFileAssociationEnabled(normalizedExtension) == enabled) {
+        return true;
+    }
+
+    if (enabled) {
+        if (!setRegistryDefaultString(HKEY_CURRENT_USER, progIdKey + "\\DefaultIcon", fileAssociationIcon(), &errorMessage)) {
+            return false;
+        }
+        if (!setRegistryDefaultString(HKEY_CURRENT_USER, progIdKey + "\\shell\\open\\command", fileAssociationCommand(), &errorMessage)) {
+            deleteRegistryTreeIfExists(HKEY_CURRENT_USER, progIdKey, nullptr);
+            return false;
+        }
+        if (!setRegistryDefaultString(HKEY_CURRENT_USER, extensionKey, progId, &errorMessage)) {
+            deleteRegistryTreeIfExists(HKEY_CURRENT_USER, progIdKey, nullptr);
+            return false;
+        }
+        if (notifyShell) {
+            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+        }
+        return true;
+    }
+
+    QString currentProgId;
+    const bool hasOurAssociation = readRegistryDefaultString(HKEY_CURRENT_USER, extensionKey, &currentProgId)
+        && currentProgId.compare(progId, Qt::CaseInsensitive) == 0;
+    bool ok = true;
+    if (hasOurAssociation) {
+        ok = deleteRegistryDefaultValue(HKEY_CURRENT_USER, extensionKey, &errorMessage);
+    }
+    ok = ok && deleteRegistryTreeIfExists(HKEY_CURRENT_USER, progIdKey, &errorMessage);
+    if (ok && notifyShell) {
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    }
+    return ok;
+#endif
+}
+
+bool MainWindow::setFileAssociationsEnabled(const QStringList& extensions, bool enabled)
+{
+#ifndef Q_OS_WIN
+    Q_UNUSED(extensions);
+    Q_UNUSED(enabled);
+    return false;
+#else
+    bool ok = true;
+    bool changed = false;
+    for (const QString& extension : extensions) {
+        const bool result = setFileAssociationEnabled(extension, enabled, false);
+        ok = ok && result;
+        changed = changed || result;
+    }
+    if (changed) {
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+    }
+    return ok;
+#endif
+}
+
 QString MainWindow::thumbnailKey(const QString& path) const
 {
     return path;
@@ -1004,24 +1509,89 @@ void MainWindow::updateInfoPanel(const DecodedImage* decoded)
         return;
     }
 
+    const QFileInfo fileInfo(currentPath_);
+    const ImageFormatKind formatKind = ImageDecoder::detectFormat(currentPath_);
+    const QString formatLabel = [formatKind]() {
+        switch (formatKind) {
+        case ImageFormatKind::Jpeg:
+            return "JPEG";
+        case ImageFormatKind::Heif:
+            return "HEIF / AVIF";
+        case ImageFormatKind::Arw:
+            return "RAW";
+        case ImageFormatKind::Unknown:
+        default:
+            return "Unknown";
+        }
+    }();
+
     QStringList lines;
-    lines << QString("File: %1").arg(QFileInfo(currentPath_).fileName());
-    lines << QString("Path: %1").arg(currentPath_);
-    if (decoded && decoded->isValid()) {
-        lines << QString("Decoder: %1").arg(decoded->decoderName);
-        lines << QString("Mode: %1").arg(decoded->isPreview ? "Fast Preview" : "Full Quality");
-        lines << QString("Size: %1 x %2").arg(decoded->sourceSize.width()).arg(decoded->sourceSize.height());
-        if (!decoded->metadataLines.isEmpty()) {
+    auto addSection = [&lines](const QString& title) {
+        if (!lines.isEmpty()) {
             lines << "";
-            lines << "Metadata:";
+        }
+        lines << title;
+    };
+    auto addLine = [&lines](const QString& key, const QString& value) {
+        lines << QString("  %1: %2").arg(key, value);
+    };
+
+    addSection("File");
+    addLine("Name", fileInfo.fileName().isEmpty() ? currentPath_ : fileInfo.fileName());
+    addLine("Folder", fileInfo.absolutePath());
+    addLine("Path", fileInfo.absoluteFilePath());
+    addLine("Extension", fileInfo.suffix().isEmpty() ? "None" : QString(".%1").arg(fileInfo.suffix().toLower()));
+    addLine("Format", formatLabel);
+    addLine("Size on disk", fileInfo.exists() ? formatBytes(fileInfo.size()) : "Unknown");
+    addLine("Modified", formatDateTime(fileInfo.lastModified()));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    addLine("Created", formatDateTime(fileInfo.birthTime()));
+#endif
+    const int currentIndex = std::max(0, catalog_.currentIndex());
+    const int total = catalog_.size();
+    if (total > 0) {
+        addLine("Catalog position", QString("%1 / %2").arg(currentIndex + 1).arg(total));
+    }
+
+    if (decoded && decoded->isValid()) {
+        const QImage& image = decoded->image;
+        const QSize imageSize = image.size();
+        const QSize sourceSize = decoded->sourceSize.isValid() ? decoded->sourceSize : imageSize;
+
+        addSection("Decode");
+        addLine("Decoder", decoded->decoderName);
+        addLine("Mode", decoded->isPreview ? "Fast Preview" : "Full Quality");
+        addLine("Source size", QString("%1 x %2").arg(sourceSize.width()).arg(sourceSize.height()));
+        addLine("Preview", decoded->isPreview ? "Yes" : "No");
+        addLine("Metadata lines", QString::number(decoded->metadataLines.size()));
+
+        addSection("Image");
+        addLine("Dimensions", QString("%1 x %2").arg(imageSize.width()).arg(imageSize.height()));
+        addLine("Pixels", formatPixels(imageSize));
+        addLine("Aspect ratio", formatAspectRatio(imageSize));
+        addLine("Format", formatImageFormat(image.format()));
+        addLine("Depth", QString("%1 bits").arg(image.depth()));
+        addLine("Alpha", image.hasAlphaChannel() ? "Yes" : "No");
+        addLine("Bytes per line", formatBytes(image.bytesPerLine()));
+        addLine("Memory", formatBytes(image.sizeInBytes()));
+        addLine("DPI X", formatDpi(image.dotsPerMeterX()));
+        addLine("DPI Y", formatDpi(image.dotsPerMeterY()));
+        addLine("Color space", formatColorSpace(image.colorSpace()));
+
+        if (!decoded->metadataLines.isEmpty()) {
+            addSection("Metadata");
             lines << decoded->metadataLines;
         }
     } else if (decoded && !decoded->errorMessage.isEmpty()) {
-        lines << QString("Decoder: %1").arg(decoded->decoderName);
-        lines << QString("Error: %1").arg(decoded->errorMessage);
+        addSection("Decode");
+        addLine("Decoder", decoded->decoderName);
+        addLine("Status", "Failed");
+        addLine("Error", decoded->errorMessage);
     } else {
-        lines << "Loading...";
+        addSection("Decode");
+        addLine("Status", "Loading...");
     }
+
     infoText_->setPlainText(lines.join('\n'));
 }
 

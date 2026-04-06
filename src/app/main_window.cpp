@@ -57,6 +57,8 @@ constexpr int kDecodeThreadStackSize = 8 * 1024 * 1024;
 constexpr int kThumbnailStripExpandedHeight = kThumbnailSize + 48;
 constexpr int kThumbnailRevealMargin = 96;
 constexpr int kImagePrefetchWindow = 6;
+constexpr int kImmediatePrefetchDistance = 1;
+constexpr int kDeferredPrefetchPriorityBase = 100;
 constexpr int kMaxQueuedThumbnailRequests = 64;
 constexpr int kMaxQueuedImagePrefetchRequests = 24;
 constexpr int kFullscreenMenuRevealMargin = 8;
@@ -1182,20 +1184,49 @@ void MainWindow::queuePrefetchForCurrentContext()
         return;
     }
 
+    const int currentIndex = catalog_.currentIndex();
+    const QList<int> hotIndices = prefetchScheduler_.orderedIndices(
+        paths.size(),
+        currentIndex,
+        browseDirection_,
+        kImmediatePrefetchDistance,
+        3);
+
+    QSet<QString> hotPaths;
+    QList<PrefetchScheduler::Request> hotRequests;
+    hotRequests.reserve(hotIndices.size());
+    int hotPriority = 0;
+    for (const int index : hotIndices) {
+        if (index < 0 || index >= paths.size()) {
+            continue;
+        }
+        const QString path = paths.at(index);
+        if (path == currentPath_) {
+            continue;
+        }
+        hotPaths.insert(path);
+        hotRequests.push_back({path, DecodeMode::FastPreview, hotPriority++});
+    }
+
     const QList<PrefetchScheduler::Request> requests = prefetchScheduler_.planImageRequests(
         paths,
-        catalog_.currentIndex(),
+        currentIndex,
         browseDirection_,
         kImagePrefetchWindow,
         kMaxQueuedImagePrefetchRequests);
-    QList<PrefetchScheduler::Request> filtered;
-    filtered.reserve(requests.size());
+    QList<PrefetchScheduler::Request> deferredRequests;
+    deferredRequests.reserve(requests.size());
     for (const auto& request : requests) {
-        if (request.path != currentPath_) {
-            filtered.push_back(request);
+        if (request.path == currentPath_ || hotPaths.contains(request.path)) {
+            continue;
         }
+        deferredRequests.push_back(
+            {request.path, request.mode, kDeferredPrefetchPriorityBase + request.priority});
     }
-    enqueueImagePrefetchRequests(filtered);
+
+    imagePrefetchRequestQueue_.clear();
+    enqueueImagePrefetchRequests(hotRequests);
+    enqueueImagePrefetchRequests(deferredRequests);
 }
 
 void MainWindow::enqueueImagePrefetchRequests(const QList<PrefetchScheduler::Request>& requests)

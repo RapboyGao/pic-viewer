@@ -7,14 +7,7 @@ set "VSWHERE_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.e
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%BUILD_CONFIG%"=="" set "BUILD_CONFIG=Release"
-set "BUILD_WORK_DIR=%BUILD_DIR%\_work-%BUILD_CONFIG%"
-for /f "delims=" %%I in ('dir /b /ad /o-d "%BUILD_DIR%\_work-%BUILD_CONFIG%-*" 2^>nul') do (
-  if exist "%BUILD_DIR%\%%I\%BUILD_CONFIG%\pic-viewer.exe" (
-    set "BUILD_WORK_DIR=%BUILD_DIR%\%%I"
-    goto :workdir_found
-  )
-)
-:workdir_found
+set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
 set "VS_INSTALL_DIR="
 if exist "%VSWHERE_EXE%" (
@@ -22,11 +15,6 @@ if exist "%VSWHERE_EXE%" (
     set "VS_INSTALL_DIR=%%I"
   )
 )
-set "APP_PATH=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
-if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
-if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\Release\pic-viewer.exe"
-if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\RelWithDebInfo\pic-viewer.exe"
-if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\pic-viewer.exe"
 
 if not exist "%APP_PATH%" (
   echo ==> App not found, building first
@@ -34,11 +22,7 @@ if not exist "%APP_PATH%" (
   set "BUILD_CONFIG=%BUILD_CONFIG%"
   call "%ROOT_DIR%\scripts\build.bat"
   if errorlevel 1 exit /b 1
-  set "APP_PATH=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
-  if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
-  if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\Release\pic-viewer.exe"
-  if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\RelWithDebInfo\pic-viewer.exe"
-  if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\pic-viewer.exe"
+  set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
 )
 
 if exist "%VCPKG_ROOT%\installed\x64-windows\bin" (

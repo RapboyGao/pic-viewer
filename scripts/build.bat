@@ -114,8 +114,31 @@ if "%RUN_TESTS%"=="1" (
   if errorlevel 1 exit /b 1
 )
 set "OUTPUT_EXE=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
+set "STABLE_OUTPUT_DIR=%BUILD_DIR%\%BUILD_CONFIG%"
+set "STABLE_PLUGIN_DIR=%STABLE_OUTPUT_DIR%\plugins"
+if not exist "%STABLE_OUTPUT_DIR%" mkdir "%STABLE_OUTPUT_DIR%"
+if exist "%OUTPUT_EXE%" (
+  copy /Y "%OUTPUT_EXE%" "%STABLE_OUTPUT_DIR%\pic-viewer.exe" >nul
+  if errorlevel 1 exit /b 1
+  if exist "%VCPKG_ROOT%\installed\x64-windows\bin" (
+    copy /Y "%VCPKG_ROOT%\installed\x64-windows\bin\*.dll" "%STABLE_OUTPUT_DIR%\" >nul 2>nul
+  )
+  if exist "%QT_PREFIX%\Qt6\plugins\platforms\qwindows.dll" (
+    if not exist "%STABLE_PLUGIN_DIR%\platforms" mkdir "%STABLE_PLUGIN_DIR%\platforms"
+    copy /Y "%QT_PREFIX%\Qt6\plugins\platforms\qwindows.dll" "%STABLE_PLUGIN_DIR%\platforms\" >nul 2>nul
+  )
+  if exist "%QT_PREFIX%\Qt6\plugins\imageformats" (
+    if not exist "%STABLE_PLUGIN_DIR%\imageformats" mkdir "%STABLE_PLUGIN_DIR%\imageformats"
+    copy /Y "%QT_PREFIX%\Qt6\plugins\imageformats\*.dll" "%STABLE_PLUGIN_DIR%\imageformats\" >nul 2>nul
+  )
+  if exist "%QT_PREFIX%\Qt6\plugins\styles\qmodernwindowsstyle.dll" (
+    if not exist "%STABLE_PLUGIN_DIR%\styles" mkdir "%STABLE_PLUGIN_DIR%\styles"
+    copy /Y "%QT_PREFIX%\Qt6\plugins\styles\qmodernwindowsstyle.dll" "%STABLE_PLUGIN_DIR%\styles\" >nul 2>nul
+  )
+)
 if exist "%OUTPUT_EXE%" (
   echo ==> Build complete: %OUTPUT_EXE%
+  echo ==> Stable output: %STABLE_OUTPUT_DIR%\pic-viewer.exe
 ) else (
   echo ==> Build complete, but %OUTPUT_EXE% was not found
 )

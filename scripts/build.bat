@@ -6,7 +6,8 @@ for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
 set "VCPKG_TOOLCHAIN=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
 set "VCPKG_DEFAULT_PREFIX=%ROOT_DIR%\vcpkg_installed\x64-windows"
-set "MSBUILD_EXE=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe"
+set "MSBUILD_EXE="
+set "VSWHERE_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%RUN_TESTS%"=="" set "RUN_TESTS=1"
@@ -24,8 +25,24 @@ if not exist "%VCPKG_TOOLCHAIN%" (
   exit /b 1
 )
 
+if not defined MSBUILD_EXE (
+  if exist "%VSWHERE_EXE%" (
+    for /f "usebackq delims=" %%I in (`"%VSWHERE_EXE%" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\Current\Bin\amd64\MSBuild.exe`) do (
+      set "MSBUILD_EXE=%%I"
+    )
+  )
+)
+
+if not defined MSBUILD_EXE (
+  for /f "delims=" %%I in ('where msbuild.exe 2^>nul') do (
+    set "MSBUILD_EXE=%%I"
+    goto :msbuild_found
+  )
+)
+:msbuild_found
+
 if not exist "%MSBUILD_EXE%" (
-  echo error: MSBuild not found at "%MSBUILD_EXE%".
+  echo error: MSBuild not found. Set MSBUILD_EXE or install Visual Studio Build Tools.
   exit /b 1
 )
 
@@ -96,5 +113,10 @@ if "%RUN_TESTS%"=="1" (
   ctest --test-dir "%BUILD_WORK_DIR%" -C "%BUILD_CONFIG%" --output-on-failure
   if errorlevel 1 exit /b 1
 )
-echo ==> Build complete
+set "OUTPUT_EXE=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
+if exist "%OUTPUT_EXE%" (
+  echo ==> Build complete: %OUTPUT_EXE%
+) else (
+  echo ==> Build complete, but %OUTPUT_EXE% was not found
+)
 exit /b 0

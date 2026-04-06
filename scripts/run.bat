@@ -3,6 +3,7 @@ setlocal DisableDelayedExpansion
 
 set "ROOT_DIR=%~dp0.."
 for %%I in ("%ROOT_DIR%") do set "ROOT_DIR=%%~fI"
+set "VSWHERE_EXE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 
 if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%BUILD_CONFIG%"=="" set "BUILD_CONFIG=Release"
@@ -15,6 +16,12 @@ for /f "delims=" %%I in ('dir /b /ad /o-d "%BUILD_DIR%\_work-%BUILD_CONFIG%-*" 2
 )
 :workdir_found
 set "VCPKG_ROOT=%ROOT_DIR%\.deps\vcpkg"
+set "VS_INSTALL_DIR="
+if exist "%VSWHERE_EXE%" (
+  for /f "usebackq delims=" %%I in (`"%VSWHERE_EXE%" -latest -products * -property installationPath`) do (
+    set "VS_INSTALL_DIR=%%I"
+  )
+)
 set "APP_PATH=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
 if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
 if not exist "%APP_PATH%" set "APP_PATH=%BUILD_DIR%\Release\pic-viewer.exe"
@@ -44,10 +51,16 @@ if exist "%VCPKG_ROOT%\installed\x64-windows\Qt6\plugins" (
   set "QT_PLUGIN_PATH=%VCPKG_ROOT%\installed\x64-windows\Qt6\plugins"
   set "QT_QPA_PLATFORM_PLUGIN_PATH=%VCPKG_ROOT%\installed\x64-windows\Qt6\plugins\platforms"
 )
-set "VS_COMMON7_IDE=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\IDE"
-set "VS_VC_REDIST=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC\14.44.35112\x64"
-if exist "%VS_COMMON7_IDE%" set "PATH=%VS_COMMON7_IDE%;%PATH%"
-if exist "%VS_VC_REDIST%" set "PATH=%VS_VC_REDIST%;%PATH%"
+if not "%VS_INSTALL_DIR%"=="" (
+  if exist "%VS_INSTALL_DIR%\Common7\IDE" set "PATH=%VS_INSTALL_DIR%\Common7\IDE;%PATH%"
+  for /f "delims=" %%I in ('dir /b /ad /o-d "%VS_INSTALL_DIR%\VC\Redist\MSVC" 2^>nul') do (
+    if exist "%VS_INSTALL_DIR%\VC\Redist\MSVC\%%I\x64" (
+      set "PATH=%VS_INSTALL_DIR%\VC\Redist\MSVC\%%I\x64;%PATH%"
+      goto :redist_found
+    )
+  )
+)
+:redist_found
 
 if "%~1"=="" (
   start "" "%APP_PATH%"

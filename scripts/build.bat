@@ -13,6 +13,8 @@ if "%BUILD_DIR%"=="" set "BUILD_DIR=%ROOT_DIR%\build"
 if "%RUN_TESTS%"=="" set "RUN_TESTS=1"
 if "%BUILD_CONFIG%"=="" set "BUILD_CONFIG=Debug"
 if "%BUILD_WORK_DIR%"=="" set "BUILD_WORK_DIR=%BUILD_DIR%\_work-%BUILD_CONFIG%-%RANDOM%%RANDOM%"
+set "BUILD_ARTIFACT_DIR=%BUILD_DIR%\_artifacts"
+set "BUILD_MARKER_DIR=%BUILD_ARTIFACT_DIR%\markers"
 
 if "%QT_PREFIX%"=="" (
   if not "%Qt6_DIR%"=="" (
@@ -47,6 +49,8 @@ if not exist "%MSBUILD_EXE%" (
 )
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+if not exist "%BUILD_ARTIFACT_DIR%" mkdir "%BUILD_ARTIFACT_DIR%"
+if not exist "%BUILD_MARKER_DIR%" mkdir "%BUILD_MARKER_DIR%"
 mkdir "%BUILD_WORK_DIR%"
 
 rem Stop any running copies so the linker can overwrite the executables.
@@ -117,6 +121,7 @@ set "OUTPUT_EXE=%BUILD_WORK_DIR%\%BUILD_CONFIG%\pic-viewer.exe"
 set "STABLE_OUTPUT_DIR=%BUILD_DIR%\%BUILD_CONFIG%"
 set "STABLE_PLUGIN_DIR=%STABLE_OUTPUT_DIR%\plugins"
 if not exist "%STABLE_OUTPUT_DIR%" mkdir "%STABLE_OUTPUT_DIR%"
+if not exist "%BUILD_MARKER_DIR%" mkdir "%BUILD_MARKER_DIR%"
 if exist "%OUTPUT_EXE%" (
   copy /Y "%OUTPUT_EXE%" "%STABLE_OUTPUT_DIR%\pic-viewer.exe" >nul
   if errorlevel 1 exit /b 1
@@ -143,8 +148,13 @@ if exist "%OUTPUT_EXE%" (
   )
 )
 set "PACKAGE_PATH=%BUILD_DIR%\pic-viewer-%BUILD_CONFIG%.zip"
+set "PACKAGE_STAGING_DIR=%BUILD_ARTIFACT_DIR%\package-%BUILD_CONFIG%"
+if exist "%PACKAGE_STAGING_DIR%" rmdir /S /Q "%PACKAGE_STAGING_DIR%" >nul 2>nul
 if exist "%STABLE_OUTPUT_DIR%\pic-viewer.exe" (
-  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%STABLE_OUTPUT_DIR%\*' -DestinationPath '%PACKAGE_PATH%' -Force"
+  mkdir "%PACKAGE_STAGING_DIR%"
+  xcopy /E /I /Q /Y "%STABLE_OUTPUT_DIR%\*" "%PACKAGE_STAGING_DIR%\" >nul
+  if errorlevel 1 exit /b 1
+  powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%PACKAGE_STAGING_DIR%\*' -DestinationPath '%PACKAGE_PATH%' -Force"
   if errorlevel 1 exit /b 1
 )
 if exist "%OUTPUT_EXE%" (

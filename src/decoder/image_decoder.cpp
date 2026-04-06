@@ -604,8 +604,11 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
     // into black borders on the full-quality pass.
     rawProcessor.adjust_to_raw_inset_crop(1);
     rawProcessor.imgdata.params.use_camera_wb = 1;
-    rawProcessor.imgdata.params.use_camera_matrix = 1;
-    rawProcessor.imgdata.params.no_auto_bright = 0;
+    rawProcessor.imgdata.params.use_camera_matrix = 3;
+    rawProcessor.imgdata.params.output_color = 1;
+    rawProcessor.imgdata.params.no_auto_bright = 1;
+    rawProcessor.imgdata.params.gamm[0] = 1.0f / 2.4f;
+    rawProcessor.imgdata.params.gamm[1] = 12.92f;
     rawProcessor.imgdata.params.adjust_maximum_thr = 0.0f;
 
     const int processResult = rawProcessor.dcraw_process();
@@ -630,7 +633,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
                 processedImage->data + (y * sourceStride),
                 std::min(stride, sourceStride));
         }
-        result.image = applyRawOrientation(qimage.convertToFormat(QImage::Format_RGBA8888), rawFlip);
+        result.image = qimage.convertToFormat(QImage::Format_RGBA8888);
         result.sourceSize = result.image.size();
         result.isPreview = false;
     } else if (processedImage->type == LIBRAW_IMAGE_JPEG) {
@@ -639,7 +642,7 @@ DecodedImage decodeArw(const QString& path, DecodeMode mode)
             reinterpret_cast<const uchar*>(processedImage->data),
             processedImage->data_size,
             "JPEG");
-        result.image = applyRawOrientation(qimage.convertToFormat(QImage::Format_RGBA8888), rawFlip);
+        result.image = qimage.convertToFormat(QImage::Format_RGBA8888);
         result.sourceSize = result.image.size();
         result.isPreview = false;
     } else {

@@ -6,6 +6,7 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QCursor>
 #include <QEvent>
 #include <QFileDialog>
@@ -42,6 +43,8 @@ constexpr int kThumbnailRevealMargin = 96;
 constexpr int kImagePrefetchWindow = 6;
 constexpr int kMaxQueuedThumbnailRequests = 64;
 constexpr int kMaxQueuedImagePrefetchRequests = 24;
+constexpr int kFullscreenMenuRevealMargin = 8;
+constexpr int kFullscreenMenuAutoHideDelayMs = 1000;
 constexpr qint64 kThumbnailCacheBudgetBytes = 48LL * 1024 * 1024;
 constexpr qint64 kImageCacheBudgetBytes = 256LL * 1024 * 1024;
 
@@ -101,8 +104,13 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
     thumbnailAutoHideEnabled_ = true;
     thumbnailStripContainer_->hide();
 
+    fullscreenMenuBarAutoHideTimer_ = new QTimer(this);
+    fullscreenMenuBarAutoHideTimer_->setSingleShot(true);
+    fullscreenMenuBarAutoHideTimer_->setInterval(kFullscreenMenuAutoHideDelayMs);
+
     createMenus();
     createInfoPanel();
+    applyFullscreenMenuBarVisibility(true);
     auto registerNavigationShortcut = [this](int key, void (MainWindow::*handler)()) {
         auto* shortcut = new QShortcut(QKeySequence(key), this);
         shortcut->setContext(Qt::ApplicationShortcut);
@@ -136,11 +144,18 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
             applyThumbnailStripVisibility(false, true);
         }
     });
+    connect(fullscreenMenuBarAutoHideTimer_, &QTimer::timeout, this, [this]() {
+        if (isFullScreen() && fullscreenMenuBarVisible_ && !shouldKeepFullscreenMenuBarVisible()) {
+            applyFullscreenMenuBarVisibility(false);
+        }
+    });
 
+    qApp->installEventFilter(this);
     viewer_->installEventFilter(this);
     thumbnailList_->installEventFilter(this);
     thumbnailList_->viewport()->installEventFilter(this);
     centralWidget()->installEventFilter(this);
+    menuBar()->installEventFilter(this);
 
     if (!startupPath.isEmpty()) {
         openPath(startupPath);
@@ -501,8 +516,10 @@ void MainWindow::toggleFullscreen()
 {
     if (isFullScreen()) {
         showNormal();
+        applyFullscreenMenuBarVisibility(true);
     } else {
         showFullScreen();
+        applyFullscreenMenuBarVisibility(false);
     }
 }
 
@@ -827,6 +844,27 @@ QString MainWindow::thumbnailKey(const QString& path) const
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event)
 {
+    if (isFullScreen()) {
+        if (event->type() == QEvent::KeyPress) {
+            const auto* keyEvent = static_cast<QKeyEvent*>(event);
+            if (keyEvent->key() == Qt::Key_Alt) {
+                applyFullscreenMenuBarVisibility(true);
+                fullscreenMenuBarAutoHideTimer_->start();
+            }
+        } else if (event->type() == QEvent::MouseMove || event->type() == QEvent::Enter) {
+            if (watched == menuBar()) {
+                applyFullscreenMenuBarVisibility(true);
+                fullscreenMenuBarAutoHideTimer_->stop();
+            } else {
+                maybeShowFullscreenMenuBarForCursor();
+            }
+        } else if (event->type() == QEvent::Leave) {
+            if (watched == menuBar()) {
+                fullscreenMenuBarAutoHideTimer_->start();
+            }
+        }
+    }
+
     if (thumbnailAutoHideEnabled_) {
         if (event->type() == QEvent::MouseMove || event->type() == QEvent::Enter) {
             maybeShowThumbnailStripForCursor();
@@ -909,6 +947,41 @@ void MainWindow::applyThumbnailStripVisibility(bool visible, bool animated)
     thumbnailStripAnimation_->start();
 }
 
+void MainWindow::applyFullscreenMenuBarVisibility(bool visible)
+{
+    if (!menuBar()) {
+        return;
+    }
+
+    fullscreenMenuBarVisible_ = visible;
+    if (isFullScreen()) {
+        menuBar()->setVisible(visible);
+        if (visible) {
+            menuBar()->raise();
+        }
+    } else {
+        menuBar()->setVisible(true);
+    }
+}
+
+bool MainWindow::shouldKeepFullscreenMenuBarVisible() const
+{
+    if (!isFullScreen()) {
+        return true;
+    }
+
+    if (menuBar() && menuBar()->isVisible() && menuBar()->underMouse()) {
+        return true;
+    }
+
+    if (!centralWidget()) {
+        return false;
+    }
+
+    const QPoint localPos = centralWidget()->mapFromGlobal(QCursor::pos());
+    return localPos.y() <= kFullscreenMenuRevealMargin;
+}
+
 void MainWindow::updateThumbnailActions()
 {
     if (thumbnailStripAction_) {
@@ -968,5 +1041,20 @@ void MainWindow::maybeShowThumbnailStripForCursor()
         applyThumbnailStripVisibility(true, true);
     } else {
         thumbnailAutoHideTimer_->start();
+    }
+}
+
+void MainWindow::maybeShowFullscreenMenuBarForCursor()
+{
+    if (!isFullScreen() || !menuBar() || !centralWidget()) {
+        return;
+    }
+
+    const QPoint localPos = centralWidget()->mapFromGlobal(QCursor::pos());
+    if (localPos.y() <= kFullscreenMenuRevealMargin) {
+        applyFullscreenMenuBarVisibility(true);
+        fullscreenMenuBarAutoHideTimer_->start();
+    } else if (fullscreenMenuBarVisible_) {
+        fullscreenMenuBarAutoHideTimer_->start();
     }
 }

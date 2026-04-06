@@ -20,6 +20,7 @@
 class QAction;
 class QActionGroup;
 class QDockWidget;
+class QMenuBar;
 class SlideShowController;
 class QListWidgetItem;
 
@@ -59,8 +60,11 @@ private:
     void createInfoPanel();
     void createThumbnailStrip();
     void applyThumbnailStripVisibility(bool visible, bool animated);
+    void applyFullscreenMenuBarVisibility(bool visible);
     void updateThumbnailActions();
     void maybeShowThumbnailStripForCursor();
+    void maybeShowFullscreenMenuBarForCursor();
+    [[nodiscard]] bool shouldKeepFullscreenMenuBarVisible() const;
     void openPath(const QString& path);
     void refreshCurrentImage();
     void requestImage(const QString& path, DecodeMode mode, bool displayWhenReady);
@@ -126,9 +130,11 @@ private:
     QList<ImagePrefetchJob> imagePrefetchRequestQueue_;
     QPropertyAnimation* thumbnailStripAnimation_ = nullptr;
     QTimer* thumbnailAutoHideTimer_ = nullptr;
+    QTimer* fullscreenMenuBarAutoHideTimer_ = nullptr;
     QDockWidget* infoDock_ = nullptr;
     QPlainTextEdit* infoText_ = nullptr;
     PrefetchScheduler::Direction browseDirection_ = PrefetchScheduler::Direction::Unknown;
     bool thumbnailStripVisible_ = true;
     bool thumbnailAutoHideEnabled_ = false;
+    bool fullscreenMenuBarVisible_ = true;
 };

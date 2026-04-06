@@ -9,6 +9,7 @@
 #include <cstring>
 #include <memory>
 #include <algorithm>
+#include <string>
 #include <vector>
 
 #include <jpeglib.h>
@@ -32,6 +33,17 @@ QString safeLatin1(const char* value)
         return {};
     }
     return QString::fromLatin1(value);
+}
+
+int openRawFile(LibRaw& rawProcessor, const QString& path)
+{
+#ifdef _WIN32
+    // LibRaw accepts wide paths on Windows; this avoids failures on non-ASCII folders.
+    const std::wstring widePath = path.toStdWString();
+    return rawProcessor.open_file(widePath.c_str());
+#else
+    return rawProcessor.open_file(path.toUtf8().constData());
+#endif
 }
 
 DecodedImage decodeWithQtReader(const QString& path, const QString& decoder)
@@ -235,7 +247,7 @@ QImage decodeHeifThumbnail(const QString& path, int maxEdge)
 DecodedImage decodeArw(const QString& path, DecodeMode mode)
 {
     LibRaw rawProcessor;
-    const int openResult = rawProcessor.open_file(path.toUtf8().constData());
+    const int openResult = openRawFile(rawProcessor, path);
     if (openResult != LIBRAW_SUCCESS) {
         return makeError(path, "LibRaw", QString::fromLatin1(libraw_strerror(openResult)));
     }

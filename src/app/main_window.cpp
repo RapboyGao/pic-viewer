@@ -724,7 +724,7 @@ void MainWindow::createMenus()
     intervalActionGroup_->setExclusive(true);
     intervalActions_.clear();
 
-    for (const int interval : {1000, 3000, 5000, 10000}) {
+    for (const int interval : {500, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000, 15000, 20000, 30000, 60000}) {
         QAction* action = playbackMenu_->addAction(modeLabelForAction(interval));
         action->setCheckable(true);
         action->setData(interval);

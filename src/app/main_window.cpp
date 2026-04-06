@@ -19,6 +19,7 @@
 #include <QMenuBar>
 #include <QDockWidget>
 #include <QPoint>
+#include <QShortcut>
 #include <QScrollBar>
 #include <QFrame>
 #include <QPlainTextEdit>
@@ -102,6 +103,17 @@ MainWindow::MainWindow(const QString& startupPath, QWidget* parent)
 
     createMenus();
     createInfoPanel();
+    auto registerNavigationShortcut = [this](int key, void (MainWindow::*handler)()) {
+        auto* shortcut = new QShortcut(QKeySequence(key), this);
+        shortcut->setContext(Qt::ApplicationShortcut);
+        connect(shortcut, &QShortcut::activated, this, handler);
+    };
+    registerNavigationShortcut(Qt::Key_Left, &MainWindow::showPreviousImage);
+    registerNavigationShortcut(Qt::Key_A, &MainWindow::showPreviousImage);
+    registerNavigationShortcut(Qt::Key_PageUp, &MainWindow::showPreviousImage);
+    registerNavigationShortcut(Qt::Key_Right, &MainWindow::showNextImage);
+    registerNavigationShortcut(Qt::Key_D, &MainWindow::showNextImage);
+    registerNavigationShortcut(Qt::Key_PageDown, &MainWindow::showNextImage);
 
     connect(slideshow_, &SlideShowController::advanceRequested, this, &MainWindow::showNextImage);
     connect(slideshow_, &SlideShowController::playingChanged, this, [this](bool playing) {

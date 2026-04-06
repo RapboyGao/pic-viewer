@@ -36,6 +36,7 @@ if(APPLE)
 endif()
 
 set(PIC_VIEWER_SOURCES
+    assets/app_icon.rc
     assets/resources.qrc
     src/app/main.cpp
     src/app/main_window.cpp

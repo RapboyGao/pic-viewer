@@ -1,5 +1,5 @@
 <RCC>
     <qresource prefix="/">
-        <file alias="icons/app_icon.xpm">app_icon.xpm</file>
+        <file alias="icons/app_icon.ico">app_icon.ico</file>
     </qresource>
 </RCC>
